@@ -18,26 +18,75 @@
 #ifndef __FASTLIMO_LOCALIZER_HPP__
 #define __FASTLIMO_LOCALIZER_HPP__
 
-#include "fast_limo/Common.hpp"
-#include "fast_limo/Modules/Mapper.hpp"
+#ifndef HAS_CUPID
+#include <cpuid.h>
+#endif
+
+// System
+#include <ctime>
+#include <iomanip>
+#include <algorithm>
+#include <future>
+#include <ios>
+#include <sys/times.h>
+#include <sys/vtimes.h>
+
+#include <iostream>
+#include <sstream>
+#include <fstream>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <chrono>
+#include <string>
+
+#include <climits>
+#include <cmath>
+
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <queue>
+
+// Boost
+#include <boost/format.hpp>
+#include <boost/circular_buffer.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/range/adaptor/indexed.hpp>
+#include <boost/range/adaptor/adjacent_filtered.hpp>
+#include <boost/range/adaptor/filtered.hpp>
+
+
 #include "fast_limo/Objects/State.hpp"
-#include "fast_limo/Objects/Match.hpp"
-#include "fast_limo/Objects/Plane.hpp"
 #include "fast_limo/Utils/Config.hpp"
+#include "fast_limo/Utils/PCL.hpp"
+#include "fast_limo/Objects/Meas.hpp"
 #include "fast_limo/Utils/Algorithms.hpp"
+
+#include "ikd-Tree/ikd_Tree/ikd_Tree.h"
+
+// #include "IKFoM/use-ikfom.hpp"
+// #include "IKFoM/use-ikfom.hpp"
+// #include "IKFoM/common_lib.hpp"
+#include "IKFoM/esekfom.hpp"
 
 using namespace fast_limo;
 
-class fast_limo::Localizer {
+namespace fast_limo {
+
+enum class SensorType { OUSTER, VELODYNE, HESAI, LIVOX, UNKNOWN };
+
+class Localizer {
 
 	// VARIABLES
 
 	public:
-		pcl::PointCloud<PointType>::ConstPtr pc2match; // pointcloud to match in Xt2 (last_state) frame
+    // pointcloud to match in Xt2 (last_state) frame
+		pcl::PointCloud<PointType>::ConstPtr pc2match_;
+		KD_TREE<MapPoint>::Ptr map_;
 
-	private:
 		// Iterated Kalman Filter on Manifolds (FASTLIOv2)
-		esekfom::esekf<state_ikfom, 12, input_ikfom> _iKFoM;
+		esekfom::esekf iKFoM_;
 		std::mutex mtx_ikfom;
 
 		State state, last_state;
@@ -48,18 +97,10 @@ class fast_limo::Localizer {
 		// Config struct
 		Config config;
 
-		// Matches (debug aux var.)
-		Matches matches;
 
 		// PCL Filters
 		pcl::CropBox<PointType> crop_filter;
 		pcl::VoxelGrid<PointType> voxel_filter;
-
-		// Point Clouds
-		pcl::PointCloud<PointType>::ConstPtr original_scan; // in base_link/body frame
-		pcl::PointCloud<PointType>::ConstPtr deskewed_scan; // in global/world frame
-		pcl::PointCloud<PointType>::Ptr final_raw_scan;     // in global/world frame
-		pcl::PointCloud<PointType>::Ptr final_scan;         // in global/world frame
 
 		// Time related var.
 		double scan_stamp;
@@ -92,7 +133,7 @@ class fast_limo::Localizer {
 
 
 		// IMU axis matrix 
-		Eigen::Matrix3f imu_accel_sm_;
+		Eigen::Matrix3d imu_accel_sm_;
 		/*(if your IMU doesn't comply with axis system ISO-8855, 
 		this matrix is meant to map its current orientation with respect to the standard axis system)
 			Y-pitch
@@ -128,6 +169,12 @@ class fast_limo::Localizer {
 	// FUNCTIONS
 
 	public:
+  // Point Clouds
+		PointCloudT::ConstPtr original_scan; // in base_link/body frame
+		PointCloudT::ConstPtr deskewed_scan; // in global/world frame
+		PointCloudT::Ptr final_raw_scan;     // in global/world frame
+		PointCloudT::Ptr final_scan;         // in global/world frame
+
 		Localizer();
 		void init(Config& cfg);
 
@@ -135,22 +182,11 @@ class fast_limo::Localizer {
 		void updateIMU(IMUmeas& raw_imu);
 		void updatePointCloud(pcl::PointCloud<PointType>::Ptr& raw_pc, double time_stamp);
 
-		// Get output
-		pcl::PointCloud<PointType>::Ptr get_pointcloud();
-		pcl::PointCloud<PointType>::Ptr get_finalraw_pointcloud();
-
-		pcl::PointCloud<PointType>::ConstPtr get_orig_pointcloud();
-		pcl::PointCloud<PointType>::ConstPtr get_deskewed_pointcloud();
-		pcl::PointCloud<PointType>::ConstPtr get_pc2match_pointcloud();
-
-		Matches& get_matches();
-
+		std::vector<double> getPoseCovariance();
+		std::vector<double> getTwistCovariance();
 		State getWorldState();  // get state in body/base_link frame
-		State getBodyState();   // get state in LiDAR frame
+		// State getBodyState();   // get state in LiDAR frame
 
-		std::vector<double> getPoseCovariance(); // get eKF covariances
-		std::vector<double> getTwistCovariance();// get eKF covariances
-		
 		double get_propagate_time();
 
 		// Status info
@@ -159,12 +195,8 @@ class fast_limo::Localizer {
 		// Config
 		void set_sensor_type(uint8_t type);
 
-		// iKFoM measurement model
-		void calculate_H(const state_ikfom&, const Matches&, Eigen::MatrixXd& H, Eigen::VectorXd& h);
-
 		// Backpropagation
 		void propagateImu(const IMUmeas& imu);
-		void propagateImu(double t1, double t2);
 
 	private:
 		void init_iKFoM();
@@ -172,16 +204,10 @@ class fast_limo::Localizer {
 
 		IMUmeas imu2baselink(IMUmeas& imu);
 
-		pcl::PointCloud<PointType>::Ptr deskewPointCloud(pcl::PointCloud<PointType>::Ptr& pc, double& start_time);
+		PointCloudT::Ptr deskewPointCloud(PointCloudT::Ptr& pc, double& start_time);
 
-		States integrateImu(double start_time, double end_time, State& state);
-
-		bool propagatedFromTimeRange(double start_time, double end_time,
-								  boost::circular_buffer<State>::reverse_iterator& begin_prop_it,
-								  boost::circular_buffer<State>::reverse_iterator& end_prop_it);
-		bool imuMeasFromTimeRange(double start_time, double end_time,
-								  boost::circular_buffer<IMUmeas>::reverse_iterator& begin_imu_it,
-								  boost::circular_buffer<IMUmeas>::reverse_iterator& end_imu_it);
+		// States integrateImu(double start_time, double end_time);
+                  
 		bool isInRange(PointType& p);
 
 		void getCPUinfo();
@@ -203,5 +229,6 @@ class fast_limo::Localizer {
 		Localizer& operator=(Localizer&&) = delete;
 
 };
+}
 
 #endif

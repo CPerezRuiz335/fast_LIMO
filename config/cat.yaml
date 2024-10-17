@@ -15,17 +15,17 @@ num_threads: 10 # OpenMP threads (will be equal to $(nproc) if it is set higher)
 sensor_type: 1  # LiDAR type (0: OUSTER \ 1: VELODYNE \ 2: HESAI \ 3: LIVOX)
 
 debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visualizing purposes
-verbose: true   # print debug/performance board
+verbose: false   # print debug/performance board
 
-estimate_extrinsics: true   # continuous estimation of LiDAR-IMU extrinsics 
+estimate_extrinsics: false   # continuous estimation of LiDAR-IMU extrinsics 
 time_offset: true           # whether to take into account a possible sync offset between IMU and LiDAR (set to true if they are not properly in sync)
 end_of_sweep: false          # whether the sweep reference time is w.r.t. the start or the end of the scan (only applies to VELODYNE/OUSTER)
 
 calibration:  # automatic IMU calibration (if all set to false, no calibration will be done)
-  gravity_align: true     # estimate gravity vector
-  accel: true             # estimate lin. accel. bias
-  gyro: true              # estimate ang. vel. bias
-  time: 0.5               # time to estimate (during this time, the robot must be at stand still)
+  gravity_align: false     # estimate gravity vector
+  accel: false            # estimate lin. accel. bias
+  gyro: false           # estimate ang. vel. bias
+  time: 0.0               # time to estimate (during this time, the robot must be at stand still)
 
 extrinsics: # w.r.t baselink [SI]
   imu:
@@ -35,9 +35,9 @@ extrinsics: # w.r.t baselink [SI]
           0.,  0.,  1. ]
   lidar:
     t: [1.10, 0.0, 0.05]
-    R: [0.998,  0.0,  -0.052,
-        0.0, 1.0,  0.0,
-        0.052, 0.0, 0.998]
+    R: [  0.9986295347545738,  0.0000000,  -0.052335956242943835,
+         0.0000000,  1.0000000,  0.0000000,
+        0.052335956242943835,  0.0000000,  0.9986295347545738 ]
 
 
 intrinsics:
@@ -65,11 +65,11 @@ filters:
     value: 1.5  # [m]
 
   FoV: # crop field of view
-    active: false
+    active: true
     value: 180  # [deg]
   
   rateSampling: # quick downsample
-    active: false
+    active: true
     value: 2
 
 iKFoM:  # Iterative Kalman Filter on Manifolds lib

@@ -18,9 +18,12 @@
 #ifndef __FASTLIMO_CONFIG_HPP__
 #define __FASTLIMO_CONFIG_HPP__
 
-#include "fast_limo/Common.hpp"
+#include <vector>
+#include <string>
 
-struct fast_limo::Config{
+
+namespace fast_limo {
+struct Config{
 
     struct Topics{
         std::string lidar;
@@ -28,29 +31,29 @@ struct fast_limo::Config{
     } topics;
 
     struct Extrinsics{
-        std::vector<float> imu2baselink_t;
-        std::vector<float> imu2baselink_R;
-        std::vector<float> lidar2baselink_t;
-        std::vector<float> lidar2baselink_R;
+        std::vector<double> imu2baselink_t;
+        std::vector<double> imu2baselink_R;
+        std::vector<double> lidar2baselink_t;
+        std::vector<double> lidar2baselink_R;
     } extrinsics;
 
     struct Intrinsics{
-        std::vector<float> accel_bias;
-        std::vector<float> gyro_bias;
-        std::vector<float> imu_sm;
+        std::vector<double> accel_bias;
+        std::vector<double> gyro_bias;
+        std::vector<double> imu_sm;
     } intrinsics;
 
     struct Filters{
-        std::vector<float> cropBoxMin;  // crop filter
-        std::vector<float> cropBoxMax;  // crop filter
+        std::vector<double> cropBoxMin;  // crop filter
+        std::vector<double> cropBoxMax;  // crop filter
         bool crop_active;               // crop filter
-        std::vector<float> leafSize;    // voxel grid filter
+        std::vector<double> leafSize;    // voxel grid filter
         bool voxel_active;              // voxel grid filter
         double min_dist;                // norm/dist filter
         bool dist_active;               // norm/dist filter
         int rate_value;                 // time rate filter
         bool rate_active;               // time rate filter
-        float fov_angle;                // FoV filter
+        double fov_angle;                // FoV filter
         bool fov_active;                // FoV filter
     } filters;
 
@@ -63,9 +66,9 @@ struct fast_limo::Config{
             double PLANE_THRESHOLD; // threshold to consider an estimated plane is actually a plane (also used for deciding if point belongs to plane )
             bool local_mapping;     // whether to move the map with the robot's pose (fixed size map) or not (increasing size, limitless map) 
             struct iKDTree{
-                float delete_param;
-                float balance_param;
-                float voxel_size;
+                double delete_param;
+                double balance_param;
+                double voxel_size;
                 double cube_size;
                 double rm_range;
             } ikdtree;
@@ -96,5 +99,6 @@ struct fast_limo::Config{
     double imu_calib_time;  // time to be estimating IMU biases
 
 };
+}
 
 #endif

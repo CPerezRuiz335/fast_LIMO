@@ -11,7 +11,6 @@ ros::Publisher orig_pub, desk_pub, match_pub, finalraw_pub, body_pub, map_bb_pub
 std::string world_frame, body_frame;
 
 void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg){
-
     pcl::PointCloud<PointType>::Ptr pc_ (boost::make_shared<pcl::PointCloud<PointType>>());
     pcl::fromROSMsg(*msg, *pc_);
 
@@ -20,47 +19,47 @@ void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg){
 
     // Publish output pointcloud
     sensor_msgs::PointCloud2 pc_ros;
-    pcl::toROSMsg(*loc.get_pointcloud(), pc_ros);
+    pcl::toROSMsg(*loc.final_scan, pc_ros);
     pc_ros.header.stamp = ros::Time::now();
     pc_ros.header.frame_id = world_frame;
     pc_pub.publish(pc_ros);
 
     // Publish debugging pointclouds
     sensor_msgs::PointCloud2 orig_msg;
-    pcl::toROSMsg(*loc.get_orig_pointcloud(), orig_msg);
+    pcl::toROSMsg(*loc.original_scan, orig_msg);
     orig_msg.header.stamp = ros::Time::now();
     orig_msg.header.frame_id = body_frame;
     orig_pub.publish(orig_msg);
 
     sensor_msgs::PointCloud2 deskewed_msg;
-    pcl::toROSMsg(*loc.get_deskewed_pointcloud(), deskewed_msg);
+    pcl::toROSMsg(*loc.deskewed_scan, deskewed_msg);
     deskewed_msg.header.stamp = ros::Time::now();
     deskewed_msg.header.frame_id = world_frame;
     desk_pub.publish(deskewed_msg);
 
     sensor_msgs::PointCloud2 match_msg;
-    pcl::toROSMsg(*loc.get_pc2match_pointcloud(), match_msg);
+    pcl::toROSMsg(*loc.pc2match_, match_msg);
     match_msg.header.stamp = ros::Time::now();
     match_msg.header.frame_id = body_frame;
     match_pub.publish(match_msg);
 
     sensor_msgs::PointCloud2 finalraw_msg;
-    pcl::toROSMsg(*loc.get_finalraw_pointcloud(), finalraw_msg);
+    pcl::toROSMsg(*loc.final_raw_scan, finalraw_msg);
     finalraw_msg.header.stamp = ros::Time::now();
     finalraw_msg.header.frame_id = world_frame;
     finalraw_pub.publish(finalraw_msg);
 
-    // Visualize current map size
-    fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
-    visualization_msgs::Marker bb_marker = visualize_limo::getLocalMapMarker(map.get_local_map());
-    bb_marker.header.frame_id = world_frame;
-    map_bb_pub.publish(bb_marker);
+    // // Visualize current map size
+    // fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
+    // visualization_msgs::Marker bb_marker = visualize_limo::getLocalMapMarker(map.get_local_map());
+    // bb_marker.header.frame_id = world_frame;
+    // map_bb_pub.publish(bb_marker);
 
-    // Visualize current matches
-    visualization_msgs::MarkerArray match_markers = visualize_limo::getMatchesMarker(loc.get_matches(), 
-                                                                                    world_frame
-                                                                                    );
-    match_points_pub.publish(match_markers);
+    // // Visualize current matches
+    // visualization_msgs::MarkerArray match_markers = visualize_limo::getMatchesMarker(loc.get_matches(), 
+    //                                                                                 world_frame
+    //                                                                                 );
+    // match_points_pub.publish(match_markers);
 
 }
 
@@ -76,20 +75,20 @@ void imu_callback(const sensor_msgs::Imu::ConstPtr& msg){
 
     // State publishing
     nav_msgs::Odometry state_msg, body_msg;
-    tf_limo::fromLimoToROS(loc.getWorldState(), loc.getPoseCovariance(), loc.getTwistCovariance(), state_msg);
-    tf_limo::fromLimoToROS(loc.getBodyState(), loc.getPoseCovariance(), loc.getTwistCovariance(), body_msg);
+    tf_limo::fromLimoToROS(loc.propagated_buffer.back(), loc.getPoseCovariance(), loc.getTwistCovariance(), state_msg);
+    // tf_limo::fromLimoToROS(loc.getBodyState(), loc.getPoseCovariance(), loc.getTwistCovariance(), body_msg);
 
     // Fill frame id's
     state_msg.header.frame_id = world_frame;
     state_msg.child_frame_id  = body_frame;
-    body_msg.header.frame_id  = world_frame;
-    body_msg.child_frame_id   = body_frame;
+    // body_msg.header.frame_id  = world_frame;
+    // body_msg.child_frame_id   = body_frame;
 
     state_pub.publish(state_msg);
-    body_pub.publish(body_msg);
+    // body_pub.publish(body_msg);
 
     // TF broadcasting
-    tf_limo::broadcastTF(loc.getWorldState(), world_frame, body_frame, true);
+    // tf_limo::broadcastTF(loc.getWorldState(), world_frame, body_frame, true);
 
 }
 
@@ -117,21 +116,26 @@ void load_config(ros::NodeHandle* nh_ptr, fast_limo::Config* config){
     nh_ptr->param<bool>("calibration/gyro",          config->calibrate_gyro,    true);
     nh_ptr->param<double>("calibration/time",        config->imu_calib_time,    3.0);
 
-    nh_ptr->param<std::vector<float>>("extrinsics/imu/t",   config->extrinsics.imu2baselink_t,      {0.0, 0.0, 0.0});
-    nh_ptr->param<std::vector<float>>("extrinsics/imu/R",   config->extrinsics.imu2baselink_R,      std::vector<float> (9, 0.0));
-    nh_ptr->param<std::vector<float>>("extrinsics/lidar/t", config->extrinsics.lidar2baselink_t,    {0.0, 0.0, 0.0});
-    nh_ptr->param<std::vector<float>>("extrinsics/lidar/R", config->extrinsics.lidar2baselink_R,    std::vector<float> (9, 0.0));
+    nh_ptr->param<std::vector<double>>("extrinsics/imu/t",   config->extrinsics.imu2baselink_t,      {0.0, 0.0, 0.0});
+    nh_ptr->param<std::vector<double>>("extrinsics/imu/R",   config->extrinsics.imu2baselink_R,      std::vector<double> (9, 0.0));
+    nh_ptr->param<std::vector<double>>("extrinsics/lidar/t", config->extrinsics.lidar2baselink_t,    {0.0, 0.0, 0.0});
+    nh_ptr->param<std::vector<double>>("extrinsics/lidar/R", config->extrinsics.lidar2baselink_R,    std::vector<double> (9, 0.0));
 
-    nh_ptr->param<std::vector<float>>("intrinsics/accel/bias",  config->intrinsics.accel_bias,  {0.0, 0.0, 0.0});
-    nh_ptr->param<std::vector<float>>("intrinsics/gyro/bias",   config->intrinsics.gyro_bias,   {0.0, 0.0, 0.0});
-    nh_ptr->param<std::vector<float>>("intrinsics/accel/sm",    config->intrinsics.imu_sm,      std::vector<float> (9, 0.0));
+    double theta_radians = -3. * M_PI / 180.0f; // Convert degrees to radians
+    double cos_theta = std::cos(theta_radians);
+    double sin_theta = std::sin(theta_radians);
+    config->extrinsics.lidar2baselink_R = {cos_theta, 0., sin_theta, 0., 1., 0., -sin_theta, 0., cos_theta};
+
+    nh_ptr->param<std::vector<double>>("intrinsics/accel/bias",  config->intrinsics.accel_bias,  {0.0, 0.0, 0.0});
+    nh_ptr->param<std::vector<double>>("intrinsics/gyro/bias",   config->intrinsics.gyro_bias,   {0.0, 0.0, 0.0});
+    nh_ptr->param<std::vector<double>>("intrinsics/accel/sm",    config->intrinsics.imu_sm,      std::vector<double> (9, 0.0));
 
     nh_ptr->param<bool>("filters/cropBox/active",                config->filters.crop_active,   true);
-    nh_ptr->param<std::vector<float>>("filters/cropBox/box/min", config->filters.cropBoxMin,    {-1.0, -1.0, -1.0});
-    nh_ptr->param<std::vector<float>>("filters/cropBox/box/max", config->filters.cropBoxMax,    {1.0, 1.0, 1.0});
+    nh_ptr->param<std::vector<double>>("filters/cropBox/box/min", config->filters.cropBoxMin,    {-1.0, -1.0, -1.0});
+    nh_ptr->param<std::vector<double>>("filters/cropBox/box/max", config->filters.cropBoxMax,    {1.0, 1.0, 1.0});
 
     nh_ptr->param<bool>("filters/voxelGrid/active",                 config->filters.voxel_active,   true);
-    nh_ptr->param<std::vector<float>>("filters/voxelGrid/leafSize", config->filters.leafSize,       {0.25, 0.25, 0.25});
+    nh_ptr->param<std::vector<double>>("filters/voxelGrid/leafSize", config->filters.leafSize,       {0.25, 0.25, 0.25});
 
     nh_ptr->param<bool>("filters/minDistance/active",   config->filters.dist_active,    false);
     nh_ptr->param<double>("filters/minDistance/value",  config->filters.min_dist,       4.0);
@@ -139,9 +143,9 @@ void load_config(ros::NodeHandle* nh_ptr, fast_limo::Config* config){
     nh_ptr->param<bool>("filters/rateSampling/active",  config->filters.rate_active,    false);
     nh_ptr->param<int>("filters/rateSampling/value",    config->filters.rate_value,     4);
 
-    float fov_deg;
+    double fov_deg;
     nh_ptr->param<bool>("filters/FoV/active",  config->filters.fov_active,  false);
-    nh_ptr->param<float>("filters/FoV/value",  fov_deg,                     360.0f);
+    nh_ptr->param<double>("filters/FoV/value",  fov_deg,                     360.0f);
     config->filters.fov_angle = fov_deg *M_PI/360.0; // half of FoV (bc. is divided by the x-axis)
 
     nh_ptr->param<int>("iKFoM/Mapping/NUM_MATCH_POINTS",    config->ikfom.mapping.NUM_MATCH_POINTS, 5);
@@ -151,9 +155,9 @@ void load_config(ros::NodeHandle* nh_ptr, fast_limo::Config* config){
     nh_ptr->param<double>("iKFoM/Mapping/PLANES_THRESHOLD", config->ikfom.mapping.PLANE_THRESHOLD,  5.e-2);
     nh_ptr->param<bool>("iKFoM/Mapping/LocalMapping",       config->ikfom.mapping.local_mapping,    false);
 
-    nh_ptr->param<float>("iKFoM/iKDTree/balance",   config->ikfom.mapping.ikdtree.balance_param,    0.6f);
-    nh_ptr->param<float>("iKFoM/iKDTree/delete",    config->ikfom.mapping.ikdtree.delete_param,     0.3f);
-    nh_ptr->param<float>("iKFoM/iKDTree/voxel",     config->ikfom.mapping.ikdtree.voxel_size,       0.2f);
+    nh_ptr->param<double>("iKFoM/iKDTree/balance",   config->ikfom.mapping.ikdtree.balance_param,    0.6f);
+    nh_ptr->param<double>("iKFoM/iKDTree/delete",    config->ikfom.mapping.ikdtree.delete_param,     0.3f);
+    nh_ptr->param<double>("iKFoM/iKDTree/voxel",     config->ikfom.mapping.ikdtree.voxel_size,       0.2f);
     nh_ptr->param<double>("iKFoM/iKDTree/bb_size",  config->ikfom.mapping.ikdtree.cube_size,        300.0);
     nh_ptr->param<double>("iKFoM/iKDTree/bb_range", config->ikfom.mapping.ikdtree.rm_range,         200.0);
 
@@ -178,7 +182,7 @@ int main(int argc, char** argv) {
 
     // Declare the one and only Localizer and Mapper objects
     fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
-    fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
+    // fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
 
     // Setup config parameters
     fast_limo::Config config;
@@ -208,10 +212,10 @@ int main(int argc, char** argv) {
     loc.init(config);
 
     // Start spinning (async)
-    ros::AsyncSpinner spinner(0);
-    spinner.start();
+    // ros::AsyncSpinner spinner(0);
+    // spinner.start();
 
-    ros::waitForShutdown();
+    ros::spin();
 
     return 0;
 }

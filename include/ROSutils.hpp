@@ -21,9 +21,9 @@
 #include <signal.h>
 
 // Fast LIMO
-#include "fast_limo/Common.hpp"
 #include "fast_limo/Modules/Localizer.hpp"
-#include "fast_limo/Modules/Mapper.hpp"
+#include "fast_limo/Objects/Meas.hpp"
+
 
 // ROS
 #include <ros/ros.h>
@@ -67,7 +67,7 @@ void fromROStoLimo(const sensor_msgs::Imu::ConstPtr& in, fast_limo::IMUmeas& out
 
     Eigen::Quaterniond qd;
     tf2::fromMsg(in->orientation, qd);
-    out.q = qd.cast<float>();
+    out.q = qd.cast<double>();
 }
 
 void fromLimoToROS(const fast_limo::State& in, nav_msgs::Odometry& out){
@@ -182,42 +182,42 @@ visualization_msgs::Marker getLocalMapMarker(BoxPointType bb){
     return m;
 }
 
-visualization_msgs::MarkerArray getMatchesMarker(Matches& matches, std::string frame_id){
-    visualization_msgs::MarkerArray m_array;
-    visualization_msgs::Marker m;
+// visualization_msgs::MarkerArray getMatchesMarker(Matches& matches, std::string frame_id){
+//     visualization_msgs::MarkerArray m_array;
+//     visualization_msgs::Marker m;
 
-    m_array.markers.reserve(matches.size());
+//     m_array.markers.reserve(matches.size());
 
-    m.ns = "fast_limo_match";
-    m.type = visualization_msgs::Marker::SPHERE;
-    m.action = visualization_msgs::Marker::ADD;
+//     m.ns = "fast_limo_match";
+//     m.type = visualization_msgs::Marker::SPHERE;
+//     m.action = visualization_msgs::Marker::ADD;
 
-    m.color.r = 0.0f;
-    m.color.g = 0.0f;
-    m.color.b = 1.0f;
-    m.color.a = 1.0f;
+//     m.color.r = 0.0f;
+//     m.color.g = 0.0f;
+//     m.color.b = 1.0f;
+//     m.color.a = 1.0f;
 
-    m.lifetime = ros::Duration(0);
-    m.header.frame_id = frame_id;
-    m.header.stamp = ros::Time::now();
+//     m.lifetime = ros::Duration(0);
+//     m.header.frame_id = frame_id;
+//     m.header.stamp = ros::Time::now();
 
-    m.pose.orientation.w = 1.0;
+//     m.pose.orientation.w = 1.0;
 
-    m.scale.x = 0.2;
-    m.scale.y = 0.2;
-    m.scale.z = 0.2;
+//     m.scale.x = 0.2;
+//     m.scale.y = 0.2;
+//     m.scale.z = 0.2;
 
-    for(int i=0; i < matches.size(); i++){
-        m.id = i;
-        Eigen::Vector3f match_p = matches[i].get_point();
-        m.pose.position.x = match_p(0);
-        m.pose.position.y = match_p(1);
-        m.pose.position.z = match_p(2);
+//     for(int i=0; i < matches.size(); i++){
+//         m.id = i;
+//         Eigen::Vector3f match_p = matches[i].get_point();
+//         m.pose.position.x = match_p(0);
+//         m.pose.position.y = match_p(1);
+//         m.pose.position.z = match_p(2);
 
-        m_array.markers.push_back(m);
-    }
+//         m_array.markers.push_back(m);
+//     }
 
-    return m_array;
-}
+//     return m_array;
+// }
 
 }

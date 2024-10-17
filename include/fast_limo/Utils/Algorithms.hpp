@@ -18,9 +18,18 @@
 #ifndef __FASTLIMO_ALGORITHMS_HPP__
 #define __FASTLIMO_ALGORITHMS_HPP__
 
-#include "fast_limo/Common.hpp"
+#include <string>
+#include <iostream>
+#include <sstream>
+#include <fstream>
 
-namespace fast_limo::algorithms {
+#include <stdio.h>
+#include <stdlib.h>
+#include <chrono>
+#include <string>
+
+namespace fast_limo {
+namespace algorithms {
 
     template <typename Array>
     int binary_search_tailored(const Array& sorted_v, double t) {
@@ -37,6 +46,16 @@ namespace fast_limo::algorithms {
         return high;
     }
     
+  }
+
+  template <typename T>
+std::string to_string_with_precision(const T a_value, const int n = 6)
+{
+    std::ostringstream out;
+    out.precision(n);
+    out << std::fixed << a_value;
+    return out.str();
+}
 }
 
 #endif

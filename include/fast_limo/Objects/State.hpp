@@ -18,51 +18,129 @@
 #ifndef __FASTLIMO_STATE_HPP__
 #define __FASTLIMO_STATE_HPP__
 
-#include "fast_limo/Common.hpp"
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
 
-class fast_limo::State{
+#include <vector> 
+#include "IKFoM/use-ikfom.hpp"
+// #include "IKFoM/common_lib.hpp"
+// #include "IKFoM/esekfom.hpp"
 
-    public:
+#include <sophus/so3.hpp>
+#include <cassert>
 
-        struct IMUbias;
+namespace fast_limo {
 
-        Eigen::Vector3f p;      // position in global/world frame
-        Eigen::Quaternionf q;   // orientation in global/world frame
-        Eigen::Vector3f v;      // linear velocity
-        Eigen::Vector3f g;      // gravity vector
-        
-        Eigen::Vector3f w;      // angular velocity (IMU input)
-        Eigen::Vector3f a;      // linear acceleration (IMU input)
+struct State{
 
-        // Offsets
-        Eigen::Quaternionf qLI;
-        Eigen::Vector3f pLI;
+  struct IMUbias;
 
-        double time;
+  Eigen::Vector3d p;      // position in global/world frame
+  Eigen::Quaterniond q;   // orientation in global/world frame
+  Eigen::Vector3d v;      // linear velocity
+  Eigen::Vector3d g;      // gravity vector
+  
+  Eigen::Vector3d w;      // angular velocity (IMU input)
+  Eigen::Vector3d a;      // linear acceleration (IMU input)
 
-        struct IMUbias {
-            Eigen::Vector3f gyro;
-            Eigen::Vector3f accel;
-        } b;                    // IMU bias in base_link/body frame 
+  // Offsets
+  Eigen::Affine3d IL_T;
 
-        State();
-        State(const state_ikfom& s);
-        State(const state_ikfom& s, double t);
-        State(const state_ikfom& s, double t, Eigen::Vector3f a, Eigen::Vector3f w);
-        State(Eigen::Matrix4f& s);
+  double time;
 
-        void operator+=(const State& s);
+  struct IMUbias {
+    Eigen::Vector3d gyro;
+    Eigen::Vector3d accel;
+  } b;                    // IMU bias in base_link/body frame 
 
-        void update(double t);
+  State() : time(0.0) { 
+    q.setIdentity();
+    p.setZero();
+    v.setZero();
+    w.setZero();
+    a.setZero();
+    g.setZero();
+    IL_T.setIdentity();
 
-        Eigen::Matrix4f get_RT();           // get Rotation & Translation matrix
+    b.gyro.setZero();  
+    b.accel.setZero();
+  }
 
-        Eigen::Matrix4f get_RT_inv();       // get inverted Rotation & Translation matrix
 
-        Eigen::Matrix4f get_extr_RT();      // get estimated extrinsics Rotation & Translation matrix
+  State(state_ikfom& s) {
+    // Odom
+    q = s.rot.unit_quaternion();
+    p = s.pos;
+    v = s.vel;
 
-        Eigen::Matrix4f get_extr_RT_inv();  // get estimated extrinsics inverted Rotation & Translation matrix
+    // Gravity
+    g = s.grav;
 
+    // IMU bias
+    b.gyro = s.bg;
+    b.accel = s.ba;
+
+    // Offset LiDAR-IMU
+    IL_T.setIdentity();
+    IL_T.rotate(s.offset_R_L_I.unit_quaternion());
+    IL_T.translate(s.offset_T_L_I);
+  }
+
+  State(state_ikfom& s, double t) : State(s) { 
+    time = t;
+  }
+  
+  State(state_ikfom& s,
+        double t,
+        Eigen::Vector3d a,
+        Eigen::Vector3d w) : State(s, t) {
+    a = a;
+    w = w;
+  }
+
+  void update(double t){
+
+      // R ⊞ (w - bw - nw)*dt
+      // v ⊞ (R*(a - ba - na) + g)*dt
+      // p ⊞ (v*dt + 1/2*(R*(a - ba - na) + g)*dt*dt)
+
+      // Time between IMU samples
+      double dt = t - time;
+
+      Eigen::Vector3d a0 = q._transformVector(a - b.accel);
+
+      p += v*dt + 0.5*(a0 + g) * dt*dt;
+      q *= Sophus::SO3d::exp( (w - b.gyro)*dt ).unit_quaternion(); 
+      v += (a0 + g) * dt;
+  }
+
+  Eigen::Affine3d get_RT(){
+    // Transformation matrix
+    Eigen::Affine3d T = Eigen::Affine3d::Identity();
+    T.rotate(q);
+    T.translate(p);
+
+    return T;
+  }
+
+  Eigen::Affine3d get_RT_inv(){
+    Eigen::Affine3d T = get_RT().inverse();
+
+    return T;
+  }
+
+  Eigen::Affine3d get_extr_RT(){
+    // Transform matrix
+    return IL_T;
+  }
+
+  Eigen::Affine3d get_extr_RT_inv(){
+    return IL_T.inverse();
+  }
 };
+
+typedef std::vector<fast_limo::State> States;
+
+} // fast_limo
 
 #endif
