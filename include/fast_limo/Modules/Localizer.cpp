@@ -134,7 +134,7 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 		}
 
 		if (config.filters.fov_active) {
-			if (fabs(atan2(p.y, p.x)) < config.filters.fov_angle)
+			if (fabs(atan2(p.y, p.x)) >= config.filters.fov_angle)
 				continue;
 		}
 
@@ -172,9 +172,13 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 		pcl::transformPointCloud(*pc2match_, *final_scan_,
 		                         state_.get_RT() * state_.get_extr_RT());
 
-		if (config.debug)
+		if (config.debug) {
 			pcl::transformPointCloud(*deskewed_Xt2_pc, *final_raw_scan_,
 			                         state_.get_RT() * state_.get_extr_RT());
+		
+			final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
+		}
+
 
 		// Add scan to map
 		fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
@@ -415,7 +419,7 @@ void Localizer::init_iKFoM_state() {
 
 	esekfom::esekf<state_ikfom, 12, input_ikfom>::cov init_P = iKFoM_.get_P();
 	init_P.setIdentity();
-	init_P *= 1e-8f;
+	init_P *= 1e-3f;
 	
 	iKFoM_.change_P(init_P);
 }

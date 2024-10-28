@@ -109,6 +109,8 @@ namespace fast_limo {
     bool debug;    // Debug flag
     bool verbose;  // Verbose flag
 
+    double start_rosbag;
+
     // Other
     int sensor_type;        // LiDAR type
     int num_threads;        // Number of threads
@@ -231,6 +233,8 @@ namespace fast_limo {
       double ikfom_limits;
       nh.getParam("iKFoM/LIMITS", ikfom_limits);
       ikfom.LIMITS = vector<double>(23, ikfom_limits);
+
+      nh.getParam("start_rosbag", start_rosbag);
     }
 
     static Config& getInstance() {

@@ -112,6 +112,33 @@ namespace fast_limo {
 		
 		}
 
+		template <typename PointT>
+		typename pcl::PointCloud<PointT>::Ptr removeRANSACInliers(const typename pcl::PointCloud<PointT>::Ptr& input_cloud)
+		{
+			// Create a shared pointer for the resulting cloud
+			typename pcl::PointCloud<PointT>::Ptr output_cloud(new pcl::PointCloud<PointT>);
+
+			// RANSAC model and parameters
+			typename pcl::SampleConsensusModelPlane<PointT>::Ptr model(new pcl::SampleConsensusModelPlane<PointT>(input_cloud));
+			typename pcl::RandomSampleConsensus<PointT> ransac(model);
+			ransac.setDistanceThreshold(0.10); // Adjust threshold based on your data
+			ransac.setMaxIterations(100);
+
+			// Perform RANSAC to identify inliers
+			ransac.computeModel();
+			pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+			ransac.getInliers(inliers->indices);
+
+			// Extract outliers (points that are not part of the RANSAC model)
+			typename pcl::ExtractIndices<PointT> extract;
+			extract.setInputCloud(input_cloud);
+			extract.setIndices(inliers);
+			extract.setNegative(true); // Extract outliers, removing inliers
+			extract.filter(*output_cloud);
+
+			return output_cloud;
+		}
+
 	}
 }
 

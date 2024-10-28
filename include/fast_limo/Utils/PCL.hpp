@@ -5,6 +5,11 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/sample_consensus/ransac.h>
+#include <pcl/sample_consensus/sac_model_plane.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/PointIndices.h>
 
 namespace fast_limo {
   
