@@ -276,7 +276,9 @@ void Localizer::updateIMU(IMUmeas& imu) {
 
 				// Estimate gravity vector - Only approximate if biases have not been pre-calibrated
 				grav_vec = (accel_avg - state_.b.accel).normalized() * abs(gravity_);
-				Eigen::Quaternionf grav_q = Eigen::Quaternionf::FromTwoVectors(grav_vec, Eigen::Vector3f(0., 0., gravity_));
+				Eigen::Quaternionf grav_q = Eigen::Quaternionf::FromTwoVectors(
+																							grav_vec,
+																							Eigen::Vector3f(0., 0., gravity_));
 				
 				std::cout << " Gravity mean: [ "
 				          << grav_vec[0] << ", "
@@ -615,7 +617,7 @@ bool Localizer::propagatedFromTimeRange(double start_time, double end_time,
 
 void Localizer::h_share_model(state_ikfom &updated_state,
 							  esekfom::dyn_share_datastruct<double> &ekfom_data) {
-
+	
 	Config& config = Config::getInstance();
 
   Mapper& MAP = Mapper::getInstance();
@@ -631,53 +633,54 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 	std::vector<Match> matches(N);
 
 	State S(updated_state);
-
-	#pragma omp parallel for num_threads(8)
-	for (int i = 0; i < N; i++) {
-		auto p = pc2match_->points[i];
-		Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
-		Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
-
-		MapPoints near_points;
-		std::vector<float> pointSearchSqDis(config.ikfom.mapping.NUM_MATCH_POINTS);
-		MAP.knn(MapPoint(g(0), g(1), g(2)), 
-		        config.ikfom.mapping.NUM_MATCH_POINTS,
-						near_points,
-						pointSearchSqDis);
-		
-		if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
-		    or pointSearchSqDis.back() > 2)
-					continue;
-		
-		Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
-		if (not algorithms::estimate_plane(p_abcd, near_points, config.ikfom.mapping.PLANE_THRESHOLD))
-			continue;
-		
-		chosen[i] = true;
-		matches[i] = std::make_pair(g, p_abcd);
-	}
-
-
-	std::vector<Match> clean_matches;
+	
 	MatchPointCloud::Ptr point_normals(boost::make_shared<MatchPointCloud>());
-	point_normals->points.resize(clean_matches.size());
+	static std::vector<Match> clean_matches;
 
-	for (int i = 0; i < N; i++) {
-		if (chosen[i]) {
-			clean_matches.push_back(matches[i]);
 
-			if (config.debug) {
-				MatchPoint p;
-				p.x = matches[i].first.x();
-				p.y = matches[i].first.y();
-				p.z = matches[i].first.z();
-				p.intensity = 0.;
-				p.normal_x = matches[i].second(0);
-				p.normal_y = matches[i].second(1);
-				p.normal_z = matches[i].second(2);
+	if (not ekfom_data.converge) {
+		#pragma omp parallel for num_threads(8)
+		for (int i = 0; i < N; i++) {
+			auto p = pc2match_->points[i];
+			Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
+			Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
 
-				point_normals->points.push_back(p);
-			}
+			MapPoints near_points;
+			std::vector<float> pointSearchSqDis(config.ikfom.mapping.NUM_MATCH_POINTS);
+			MAP.knn(MapPoint(g(0), g(1), g(2)), 
+							config.ikfom.mapping.NUM_MATCH_POINTS,
+							near_points,
+							pointSearchSqDis);
+			
+			if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
+					or pointSearchSqDis.back() > 2)
+						continue;
+			
+			Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
+			if (not algorithms::estimate_plane(p_abcd, near_points, config.ikfom.mapping.PLANE_THRESHOLD))
+				continue;
+			
+			chosen[i] = true;
+			matches[i] = Match(bl4_point, g, p_abcd);
+		}
+	
+		clean_matches.clear();
+		point_normals->points.resize(clean_matches.size());
+
+		for (int i = 0; i < N; i++) {
+			if (chosen[i])
+				clean_matches.push_back(matches[i]);
+			
+			if (config.debug)
+				point_normals->points.push_back(matches[i].toPointXYZINormal());
+		}
+	} else {
+		point_normals->points.resize(clean_matches.size());
+
+		for (auto& match : clean_matches) {
+			match.global = (S.get_RT() * S.get_extr_RT()) * match.local; 
+			if (config.debug)
+				point_normals->points.push_back(match.toPointXYZINormal());
 		}
 	}
 
@@ -691,9 +694,8 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 	#pragma omp parallel for num_threads(8)
 	for (int i = 0; i < clean_matches.size(); ++i) {
 		Match match = clean_matches[i];
-		Eigen::Vector4f p4_imu   = S.get_RT_inv() * match.first;
+		Eigen::Vector4f p4_imu   = S.get_RT_inv() * match.global;
 		Eigen::Vector4f p4_lidar = S.get_extr_RT_inv() * p4_imu;
-		Eigen::Vector4f normal   = match.second;
 
 		// Rotation matrices
 		Eigen::Matrix3f R_inv = updated_state.rot.conjugate().toRotationMatrix().cast<float>();
@@ -703,7 +705,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 		Eigen::Vector3f p_lidar, p_imu, n;
 		p_lidar = p4_lidar.head(3);
 		p_imu   = p4_imu.head(3);
-		n       = normal.head(3);
+		n       = match.n.head(3);
 
 		// Calculate measurement Jacobian H (:= dh/dx)
 		Eigen::Vector3f C = R_inv * n;
@@ -714,13 +716,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 		if (config.ikfom.estimate_extrinsics)
 			ekfom_data.h_x.block<1, 6>(i,6) << B(0), B(1), B(2), C(0), C(1), C(2);
 
-		// Measurement: distance to the closest plane
-		double dist = normal(0) * match.first(0) 
-		              + normal(1) * match.first(1)
-									+ normal(2) * match.first(2)
-									+ normal(3); 
-
-		ekfom_data.h(i) = -dist;
+		ekfom_data.h(i) = -match.dist2plane();
 	}
 
 }

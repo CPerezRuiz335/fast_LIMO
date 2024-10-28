@@ -112,13 +112,13 @@ int main(int argc, char** argv) {
 
     signal(SIGINT, mySIGhandler); // override default ros sigint signal
 
-    // Declare the one and only Localizer and Mapper objects
-    fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
-    fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
-
     // Setup config parameters
     fast_limo::Config& config = fast_limo::Config::getInstance();
     config.fill(nh);
+
+    // Declare the one and only Localizer and Mapper objects
+    fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
+    fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
 
     // Read frames names
     nh.param<std::string>("frames/world", world_frame, "map");

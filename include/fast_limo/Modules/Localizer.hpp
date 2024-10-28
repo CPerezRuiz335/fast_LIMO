@@ -71,7 +71,35 @@
 
 namespace fast_limo {
 
-	typedef std::pair<Eigen::Vector4f, Eigen::Vector4f> Match;
+	struct Match {
+		Eigen::Vector4f local;
+		Eigen::Vector4f global;
+		Eigen::Vector4f n; // normal vector
+
+		Match() = default;
+		Match(Eigen::Vector4f& local_,
+			    Eigen::Vector4f& global_,
+					Eigen::Vector4f& n_) : local(local_), 
+																 global(global_),
+																 n(n_) {};
+
+		pcl::PointXYZINormal toPointXYZINormal() {
+			pcl::PointXYZINormal p;
+			p.x = global.x();
+			p.y = global.y();
+			p.z = global.z();
+			p.intensity = 0.;
+			p.normal_x = n(0);
+			p.normal_y = n(1);
+			p.normal_z = n(2);
+
+			return p;
+		}
+
+		float dist2plane() {
+			return n(0)*global(0) + n(1)*global(1) + n(2)*global(2) + n(3); 
+		}
+	};
 
 	enum class SensorType {
 		OUSTER,

@@ -290,7 +290,7 @@ public:
 
 		dyn_share_datastruct<scalar_type> dyn_share;
 		dyn_share.valid = true;
-		dyn_share.converge = true;
+		dyn_share.converge = false;
 		int t = 0;
 		state x_propagated = x_;
 		cov P_propagated = P_;

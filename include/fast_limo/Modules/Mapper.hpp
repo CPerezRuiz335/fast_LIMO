@@ -18,35 +18,12 @@
 #ifndef __FASTLIMO_MAPPER_HPP__
 #define __FASTLIMO_MAPPER_HPP__
 
-#include <ctime>
-#include <iomanip>
-#include <future>
-#include <ios>
-#include <sys/times.h>
-#include <sys/vtimes.h>
-
-#include <iostream>
-#include <sstream>
-#include <fstream>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <chrono>
-#include <string>
-
-#include <climits>
-#include <cmath>
-
-#include <thread>
-#include <atomic>
-#include <mutex>
-#include <queue>
-
-#include "octree2/Octree.h"
+// #include "octree2/Octree.h"
 #include "ikd-Tree/ikd_Tree/ikd_Tree.h"
 
 #include "fast_limo/Objects/State.hpp"
 #include "fast_limo/Utils/Config.hpp"
+#include "fast_limo/Utils/PCL.hpp"
 
 using namespace fast_limo;
 
@@ -56,26 +33,19 @@ namespace fast_limo {
     public:
       KD_TREE<MapPoint>::Ptr map;
 
-      Config::iKFoM::Mapping config;
-
-      double last_map_time_;
-
-      int num_threads_;;
-
       IKDTree();
 
       bool exists();
       int size();
-      double last_time();
 
       void knn(const MapPoint& p,
                int& k,
                MapPoints& near_points,
                std::vector<float>& sqDist);
 
-      void add(PointCloudT::Ptr&, double time, bool downsample=true);
+      void add(PointCloudT::Ptr&, bool downsample=true);
 
-    public:
+    private:
       void build(PointCloudT::Ptr&);
 
 
@@ -93,48 +63,6 @@ namespace fast_limo {
       IKDTree& operator=(const IKDTree&) = delete;
       IKDTree& operator=(IKDTree&&) = delete;
   };
-
-  class Octree {
-
-    public:
-      thuni::Octree map;
-
-      Config::iKFoM::Mapping config;
-
-      double last_map_time_;
-
-      int num_threads_;;
-
-      Octree();
-
-      bool exists();
-      int size();
-      double last_time();
-
-      void knn(const MapPoint& p,
-               int& k,
-               MapPoints& near_points,
-               std::vector<float>& sqDist);
-
-      void add(PointCloudT::Ptr&, double time, bool downsample=true);
-
-    public:
-      void build(PointCloudT::Ptr&);
-
-    public:
-      static Octree& getInstance() {
-        static Octree* ikd = new Octree();
-        return *ikd;
-      }
-
-    private:
-      Octree(const Octree&) = delete;
-      Octree(Octree&&) = delete;
-
-      Octree& operator=(const Octree&) = delete;
-      Octree& operator=(Octree&&) = delete;
-  };
-
 
 typedef IKDTree Mapper;
 
