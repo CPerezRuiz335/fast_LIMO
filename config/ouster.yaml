@@ -17,7 +17,7 @@ debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visu
 verbose: true   # print debug/performance board
 start_rosbag: -1 # 1723029850.081984
 
-estimate_extrinsics: true   # continuous estimation of LiDAR-IMU extrinsics 
+estimate_extrinsics: false   # continuous estimation of LiDAR-IMU extrinsics 
 time_offset: true           # whether to take into account a possible sync offset between IMU and LiDAR (set to true if they are not properly in sync)
 end_of_sweep: false          # whether the sweep reference time is w.r.t. the start or the end of the scan (only applies to VELODYNE/OUSTER)
 

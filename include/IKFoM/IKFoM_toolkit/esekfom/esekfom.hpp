@@ -210,16 +210,7 @@ public:
 			}
 			MTK::SO3<scalar_type> res;
 			res.w() = MTK::exp<scalar_type, 3>(res.vec(), seg_SO3, scalar_type(1/2));
-		#ifdef USE_sparse
-			res_temp_SO3 = res.toRotationMatrix();
-			for(int i = 0; i < 3; i++){
-				for(int j = 0; j < 3; j++){
-					f_x_1.coeffRef(idx + i, idx + j) = res_temp_SO3(i, j);
-				}
-			}
-		#else
 			F_x1.template block<3, 3>(idx, idx) = res.toRotationMatrix();
-		#endif			
 			res_temp_SO3 = MTK::A_matrix(seg_SO3);
 			for(int i = 0; i < n; i++){
 				f_x_final. template block<3, 1>(idx, i) = res_temp_SO3 * (f_x_. template block<3, 1>(dim, i));	
@@ -246,16 +237,8 @@ public:
 			Eigen::Matrix<scalar_type, 3, 2> Mx;
 			x_.S2_Nx_yy(Nx, idx);
 			x_before.S2_Mx(Mx, vec, idx);
-		#ifdef USE_sparse
-			res_temp_S2_ = Nx * res.toRotationMatrix() * Mx;
-			for(int i = 0; i < 2; i++){
-				for(int j = 0; j < 2; j++){
-					f_x_1.coeffRef(idx + i, idx + j) = res_temp_S2_(i, j);
-				}
-			}
-		#else
+		
 			F_x1.template block<2, 2>(idx, idx) = Nx * res.toRotationMatrix() * Mx;
-		#endif
 
 			Eigen::Matrix<scalar_type, 3, 3> x_before_hat;
 			x_before.S2_hat(x_before_hat, idx);
@@ -270,19 +253,15 @@ public:
 			}
 		}
 	
-	#ifdef USE_sparse
-		f_x_1.makeCompressed();
-		spMt f_x2 = f_x_final.sparseView();
-		spMt f_w1 = f_w_final.sparseView();
-		spMt xp = f_x_1 + f_x2 * dt;
-		P_ = xp * P_ * xp.transpose() + (f_w1 * dt) * Q * (f_w1 * dt).transpose();
-	#else
+	
 		F_x1 += f_x_final * dt;
 		P_ = (F_x1) * P_ * (F_x1).transpose() + (dt * f_w_final) * Q * (dt * f_w_final).transpose();
-	#endif
 
 	}
 	
+	
+
+
 	
 	// Modified version used in Fast-LIO2
 	//iterated error state EKF update modified for one specific system.
@@ -290,7 +269,7 @@ public:
 
 		dyn_share_datastruct<scalar_type> dyn_share;
 		dyn_share.valid = true;
-		dyn_share.converge = false;
+		dyn_share.converge = true;
 		int t = 0;
 		state x_propagated = x_;
 		cov P_propagated = P_;
@@ -372,22 +351,13 @@ public:
 				Eigen::Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic> h_x_cur = Eigen::Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic>::Zero(dof_Measurement, n);
 				h_x_cur.topLeftCorner(dof_Measurement, 12) = h_x_;
 
-				Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic> K_ = P_ * h_x_cur.transpose() * (h_x_cur * P_ * h_x_cur.transpose()/R + Eigen::Matrix<double, Dynamic, Dynamic>::Identity(dof_Measurement, dof_Measurement)).inverse()/R;
+				Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic> K_ = P_ * h_x_cur.transpose() 
+				  * (h_x_cur * P_ * h_x_cur.transpose()/R + Eigen::Matrix<double, Dynamic, Dynamic>::Identity(dof_Measurement, dof_Measurement)).inverse()/R; // MATRIX S
 				K_h = K_ * dyn_share.h;
 				K_x = K_ * h_x_cur;
 			}
 			else
 			{
-			#ifdef USE_sparse
-				spMt A = h_x_.transpose() * h_x_;
-				cov P_temp = (P_/R).inverse();
-				P_temp. template block<12, 12>(0, 0) += A;
-				P_temp = P_temp.inverse();
-
-				K_ = P_temp. template block<n, 12>(0, 0) * h_x_.transpose();
-				K_x = cov::Zero();
-				K_x. template block<n, 12>(0, 0) = P_inv. template block<n, 12>(0, 0) * HTH;
-			#else
 				cov P_temp = (P_/R).inverse();
 				HTH = h_x_.transpose() * h_x_;
 				P_temp. template block<12, 12>(0, 0) += HTH;
@@ -396,7 +366,6 @@ public:
 				K_h = P_inv. template block<n, 12>(0, 0) * h_x_.transpose() * dyn_share.h;
 				K_x.setZero();
 				K_x. template block<n, 12>(0, 0) = P_inv. template block<n, 12>(0, 0) * HTH;
-			#endif
 			}
 
 			Matrix<scalar_type, n, 1> dx_ = K_h + (K_x - Matrix<scalar_type, n, n>::Identity()) * dx_new; 

@@ -162,6 +162,7 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 
 		double solve_time = 0.0;
 		iKFoM_.update_iterated_dyn_share_modified(0.001 /*LiDAR noise*/);
+		clean_matches.clear();
 		
 		state_    = State(iKFoM_.get_x());
 		state_.w  = last_imu_.ang_vel;
@@ -635,10 +636,9 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 	State S(updated_state);
 	
 	MatchPointCloud::Ptr point_normals(boost::make_shared<MatchPointCloud>());
-	static std::vector<Match> clean_matches;
 
 
-	if (not ekfom_data.converge) {
+	if (clean_matches.empty()) {
 		#pragma omp parallel for num_threads(8)
 		for (int i = 0; i < N; i++) {
 			auto p = pc2match_->points[i];
@@ -664,7 +664,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 			matches[i] = Match(bl4_point, g, p_abcd);
 		}
 	
-		clean_matches.clear();
+		// clean_matches.clear();
 		point_normals->points.resize(clean_matches.size());
 
 		for (int i = 0; i < N; i++) {
@@ -742,8 +742,6 @@ Eigen::Matrix<double, 24, 23> Localizer::df_dx(state_ikfom &s, const input_ikfom
   cov.template block<3, 3>(0, 12) = Eigen::Matrix3d::Identity();
   vect3 acc_;
   in.acc.boxminus(acc_, s.ba);
-  vect3 omega;
-  in.gyro.boxminus(omega, s.bg);
   cov.template block<3, 3>(12, 3) = -s.rot.toRotationMatrix()*MTK::hat(acc_);
   cov.template block<3, 3>(12, 18) = -s.rot.toRotationMatrix();
   Eigen::Matrix<state_ikfom::scalar, 2, 1> vec = Eigen::Matrix<state_ikfom::scalar, 2, 1>::Zero();

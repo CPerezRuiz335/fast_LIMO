@@ -175,6 +175,9 @@ namespace fast_limo {
 			int deskew_size_;                        // steps taken to deskew (FoV discretization)
 			int propagated_size_;                    // number of integrated states
 
+			// Save matches
+			std::vector<Match> clean_matches;
+
 		// FUNCTIONS
 
 		public:
