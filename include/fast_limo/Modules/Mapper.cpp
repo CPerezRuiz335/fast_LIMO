@@ -96,64 +96,148 @@ void IKDTree::knn(const MapPoint& p,
 
 
 
-Octree::Octree() : last_map_time_(-1.),
-                   num_threads_(1) {
+BonxaiTree::BonxaiTree() : map(0.2) {
+  struct TupleHash {
+    std::size_t operator()(const std::tuple<int, int, int>& t) const {
+        auto [x, y, z] = t;
+        return std::hash<int>()(x) ^ (std::hash<int>()(y) << 1) ^ (std::hash<int>()(z) << 2);
+    }
+  };
+
+ std::cout << "EMPIEZA EL BFS" << std::endl;
+
+  // Define the six possible movement directions (left, right, up, down, forward, backward)
+    const std::vector<std::tuple<int, int, int>> directions = {
+      {-1, -1, -1}, {-1, -1, 0}, {-1, -1, 1},
+      {-1, 0, -1},  {-1, 0, 0},  {-1, 0, 1},
+      {-1, 1, -1},  {-1, 1, 0},  {-1, 1, 1},
+      {0, -1, -1},  {0, -1, 0},  {0, -1, 1},
+      {0, 0, -1},                {0, 0, 1},
+      {0, 1, -1},   {0, 1, 0},   {0, 1, 1},
+      {1, -1, -1},  {1, -1, 0},  {1, -1, 1},
+      {1, 0, -1},   {1, 0, 0},   {1, 0, 1},
+      {1, 1, -1},   {1, 1, 0},   {1, 1, 1}
+    };
+
+    // Queue for BFS traversal
+    std::tuple<int, int, int> start = {0, 0, 0};
+    std::queue<std::tuple<int, int, int>> q;
+    q.push(start);
+
+    // Unordered set to keep track of visited coordinates
+    std::unordered_set<std::tuple<int, int, int>, TupleHash> visited;
+    visited.insert(start);
+
+    while (!q.empty()) {
+      // Get the current position
+      auto [x, y, z] = q.front();
+      q.pop();
+
+      if (x != 0 || y != 0 || z != 0) {
+        Bonxai::CoordT coord;
+        coord.x = x;
+        coord.y = y;
+        coord.z = z;
+        coords.push_back(coord);
+      }
+
+      // Explore each direction
+      for (const auto& [dx, dy, dz] : directions) {
+        int new_x = x + dx;
+        int new_y = y + dy;
+        int new_z = z + dz;
+        std::tuple<int, int, int> neighbor = {new_x, new_y, new_z};
+
+        // If the neighbor hasn't been visited yet, add it to the queue and mark as visited
+        if (visited.find(neighbor) == visited.end() 
+            && std::max(std::max(abs(new_x), abs(new_y)), abs(new_z)) < 9) {
+            q.push(neighbor);
+            visited.insert(neighbor);
+        }
+      }
+    }
+
+  std::cout << "ACABA EL BFS" << std::endl;
+}
+
+
+
+bool BonxaiTree::exists() { return size() > 0; }
+int BonxaiTree::size() {return (int)map.activeCellsCount(); }
+double BonxaiTree::last_time() {return last_map_time_; };
+
+void BonxaiTree::knn(const MapPoint& p,
+          int& k,
+          MapPoints& near_points,
+          std::vector<float>& sqDist) {
   
-  map.set_order(false);
-  map.set_min_extent(5.); // float
-  map.set_bucket_size(5); // size_t
-  map.set_down_size(true);  // bool
+  PriorityQueue q;
 
-}
+  Accessor accessor = map.createAccessor();
+  Bonxai::CoordT pCoord = map.posToCoord(p.x, p.y, p.z);
+  
+  int j(0);
+  int arr[5] = {3*3*3, 5*5*5, 7*7*7, 9*9*9, 11*11*11};
+
+  for (int i = 0; i < coords.size(); i++) {
+    Bonxai::CoordT nCoord = pCoord;
+    nCoord += coords[i];
+    MapPoint* n = accessor.value(nCoord);
     
-bool Octree::exists() {
-  return size() > 0;
+    if (i == arr[j]) {
+      if (q.size() >= 5)
+        break;
+      j++;
+    }
+    
+    if (n == nullptr)
+      continue;
+      
+
+    double sqDist = squaredDistance(n->x, n->y, n->z, p.x, p.y, p.z);
+    q.emplace(sqDist, *n);
+
+  }
+
+  std::cout << "Q size " << q.size() << std::endl; 
+  if (q.size() >= 5) {
+    for (int i = 0; i < k; i++) {
+      Task tmp = q.top();
+      near_points.emplace_back(tmp.point);
+      sqDist.emplace_back(tmp.distance);
+      q.pop();
+    }
+  } 
+    
 }
 
-int Octree::size() {
-  return (int)map.size();
-}
-
-double Octree::last_time() {
-  return last_map_time_;
-}
-
-
-void Octree::add(PointCloudT::Ptr& pc, double time, bool downsample) {
+void BonxaiTree::add(PointCloudT::Ptr& pc, double time, bool downsample) {
+  std::cout << "BONXAI TREE" << std::endl;
+  
   if (pc->points.size() < 1)
     return;
 
-  // If map doesn't exists, build one
-  if (not exists()) {
-    build(pc);
-  } else {
-    MapPoints map_vec;
-    map_vec.reserve(pc->points.size());
+  MapPoints map_vec;
+  map_vec.reserve(pc->points.size());
 
-    for (int i = 0; i < pc->points.size(); i++)
-      map_vec.emplace_back(pc->points[i].x, pc->points[i].y, pc->points[i].z);
+  for (int i = 0; i < pc->points.size(); i++)
+    map_vec.emplace_back(pc->points[i].x, pc->points[i].y, pc->points[i].z);
 
-    map.update(map_vec, downsample);
-  }
+  Accessor accessor = map.createAccessor();
+  for (const auto& p : map_vec) {
+      Bonxai::CoordT coord = map.posToCoord(p.x, p.y, p.z);
+      MapPoint* value_ptr = accessor.value( coord );
+      
+      if (value_ptr == nullptr) {
+        accessor.setValue( coord, p );
+      } else {
+        accessor.setValue( coord, chooseClosest(coord, *value_ptr, p) );
+      }
+    }
 
   last_map_time_ = time;
 }
 
-// private
-
-void Octree::build(PointCloudT::Ptr& pc) {
-  MapPoints map_vec;
-  map_vec.reserve(pc->points.size());
-
-  for(int i = 0; i < pc->points.size (); i++)
-    map_vec.emplace_back(pc->points[i].x, pc->points[i].y, pc->points[i].z);
-
-  map.initialize(map_vec);
-}
-
-void Octree::knn(const MapPoint& p,
-         int& k,
-         MapPoints& near_points,
-         std::vector<float>& sqDist) {
-  map.knnNeighbors<MapPoint>(p, k, near_points, sqDist);
+void BonxaiTree::build(PointCloudT::Ptr&) {
+  return;
 }

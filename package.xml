@@ -34,6 +34,9 @@
   <exec_depend>tf2</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
 
+  <depend>swri_profiler</depend>
+
+
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

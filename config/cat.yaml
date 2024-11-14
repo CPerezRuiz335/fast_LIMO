@@ -10,22 +10,22 @@ frames: # output frames (the transform between frames will be broadcasted)
   world: global
   body: base_link
 
-num_threads: 10 # OpenMP threads (will be equal to $(nproc) if it is set higher)
+num_threads: 4 # OpenMP threads (will be equal to $(nproc) if it is set higher)
 
 sensor_type: 1  # LiDAR type (0: OUSTER \ 1: VELODYNE \ 2: HESAI \ 3: LIVOX)
 
 debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visualizing purposes
-verbose: true   # print debug/performance board
+verbose: false   # print debug/performance board
 
 estimate_extrinsics: true   # continuous estimation of LiDAR-IMU extrinsics 
 time_offset: true           # whether to take into account a possible sync offset between IMU and LiDAR (set to true if they are not properly in sync)
 end_of_sweep: false          # whether the sweep reference time is w.r.t. the start or the end of the scan (only applies to VELODYNE/OUSTER)
 
 calibration:  # automatic IMU calibration (if all set to false, no calibration will be done)
-  gravity_align: true     # estimate gravity vector
-  accel: true             # estimate lin. accel. bias
-  gyro: true              # estimate ang. vel. bias
-  time: 3.               # time to estimate (during this time, the robot must be at stand still)
+  gravity_align: false     # estimate gravity vector
+  accel: false             # estimate lin. accel. bias
+  gyro: false              # estimate ang. vel. bias
+  time: 0.               # time to estimate (during this time, the robot must be at stand still)
 
 extrinsics: # w.r.t baselink [SI]
   imu:

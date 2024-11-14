@@ -68,10 +68,23 @@
 #include "fast_limo/Utils/Algorithms.hpp"
 #include "fast_limo/Objects/Imu.hpp"
 
+#include <swri_profiler/profiler.h> // !!!
+#include "bonxai.hpp"
 
 namespace fast_limo {
 
 	typedef std::pair<Eigen::Vector4f, Eigen::Vector4f> Match;
+
+	#pragma pack(push, 1)
+	struct Vec3 {
+		double x;
+		double y;
+		double z;
+	};
+	#pragma pack(pop)
+
+	// typedef Bonxai::VoxelGrid<Vec3> VoxelGrid;
+	// typedef Bonxai::VoxelGrid<Vec3>::Accessor Accessor;
 
 	enum class SensorType {
 		OUSTER,
@@ -84,6 +97,7 @@ namespace fast_limo {
 	class Localizer {
 
 		private:
+			// VoxelGrid map;
 
 			PointCloudT::Ptr pc2match_; // pointcloud to match in Xt2 (last_state) frame
 			esekfom::esekf<state_ikfom, 12, input_ikfom> iKFoM_;

@@ -1,3 +1,6 @@
 [submodule "include/ioctree"]
 	path = include/ioctree
 	url = https://github.com/zhujun3753/i-octree.git
+[submodule "include/Bonxai"]
+	path = include/Bonxai
+	url = https://github.com/facontidavide/Bonxai.git

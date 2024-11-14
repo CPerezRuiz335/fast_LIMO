@@ -41,12 +41,16 @@
 #include <atomic>
 #include <mutex>
 #include <queue>
+#include <tuple>
+#include <unordered_set>
 
 #include "octree2/Octree.h"
 #include "ikd-Tree/ikd_Tree/ikd_Tree.h"
 
 #include "fast_limo/Objects/State.hpp"
 #include "fast_limo/Utils/Config.hpp"
+
+#include "bonxai.hpp"
 
 using namespace fast_limo;
 
@@ -75,6 +79,14 @@ namespace fast_limo {
 
       void add(PointCloudT::Ptr&, double time, bool downsample=true);
 
+      MapPoints flatten() {
+        MapPoints out;
+
+        map->flatten(map->Root_Node, out, NOT_RECORD);
+
+        return out;
+      }
+
     public:
       void build(PointCloudT::Ptr&);
 
@@ -94,18 +106,57 @@ namespace fast_limo {
       IKDTree& operator=(IKDTree&&) = delete;
   };
 
-  class Octree {
+  inline MapPoint chooseClosest(const Bonxai::CoordT& centroid, const MapPoint& old, const MapPoint& new_) {
+    auto squaredDistance = [](const Bonxai::CoordT& c, const MapPoint& v) {
+        double dx = static_cast<double>(c.x) - v.x;
+        double dy = static_cast<double>(c.y) - v.y;
+        double dz = static_cast<double>(c.z) - v.z;
+        return dx * dx + dy * dy + dz * dz;
+    };
 
+    double distOld = squaredDistance(centroid, old);
+    double distNew = squaredDistance(centroid, new_);
+
+    return (distOld <= distNew) ? old : new_;
+}
+
+
+  struct Task {
+    double distance;
+    MapPoint point;
+
+    Task(double d, MapPoint& p) : distance(d), point(p) {}
+  };
+
+  struct CompareTask {
+    bool operator()(const Task &a, const Task &b) const {
+      return a.distance > b.distance;
+    }
+  };
+
+  typedef std::priority_queue<Task, std::vector<Task>, CompareTask> PriorityQueue;
+
+  inline float squaredDistance(float x1, float y1, float z1, float x2, float y2, float z2) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float dz = z2 - z1;
+    return dx * dx + dy * dy + dz * dz;
+  }
+  typedef Bonxai::VoxelGrid<MapPoint>::Accessor Accessor;
+
+  class BonxaiTree {
     public:
-      thuni::Octree map;
+      std::vector<Bonxai::CoordT> coords;
+
+      Bonxai::VoxelGrid<MapPoint> map;
 
       Config::iKFoM::Mapping config;
 
       double last_map_time_;
 
-      int num_threads_;;
+      int num_threads_;
 
-      Octree();
+      BonxaiTree();
 
       bool exists();
       int size();
@@ -116,23 +167,34 @@ namespace fast_limo {
                MapPoints& near_points,
                std::vector<float>& sqDist);
 
-      void add(PointCloudT::Ptr&, double time, bool downsample=true);
+      void add(PointCloudT::Ptr& pc, double time, bool downsample=true);
+      void add(MapPoints& pc) {
+        Accessor accessor = map.createAccessor();
+        for (const auto& p : pc) {
+            Bonxai::CoordT coord = map.posToCoord(p.x, p.y, p.z);
+            accessor.setValue( coord, p );
+          }
+      }
+
+      void clear() {
+        map.clear(Bonxai::CLEAR_MEMORY);
+      }
 
     public:
       void build(PointCloudT::Ptr&);
 
     public:
-      static Octree& getInstance() {
-        static Octree* ikd = new Octree();
+      static BonxaiTree& getInstance() {
+        static BonxaiTree* ikd = new BonxaiTree();
         return *ikd;
       }
 
     private:
-      Octree(const Octree&) = delete;
-      Octree(Octree&&) = delete;
+      BonxaiTree(const BonxaiTree&) = delete;
+      BonxaiTree(BonxaiTree&&) = delete;
 
-      Octree& operator=(const Octree&) = delete;
-      Octree& operator=(Octree&&) = delete;
+      BonxaiTree& operator=(const BonxaiTree&) = delete;
+      BonxaiTree& operator=(BonxaiTree&&) = delete;
   };
 
 

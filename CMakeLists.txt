@@ -29,6 +29,7 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
+  swri_profiler
   roscpp
   pcl_ros
   sensor_msgs
@@ -41,13 +42,17 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES ${PROJECT_NAME}
- CATKIN_DEPENDS roscpp pcl_ros sensor_msgs geometry_msgs tf2 visualization_msgs nav_msgs
+ CATKIN_DEPENDS roscpp pcl_ros sensor_msgs 
+                geometry_msgs tf2 visualization_msgs 
+                nav_msgs swri_profiler
  DEPENDS EIGEN3 PCL
 )
 
 include_directories(
   include
   ${CMAKE_CURRENT_LIST_DIR}/include/ioctree
+  ${CMAKE_CURRENT_LIST_DIR}/include/Bonxai/bonxai_core/include/bonxai
+
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INLCUDE_DIRS}
   ${PCL_INLCUDE_DIRS}
@@ -71,6 +76,9 @@ target_link_libraries(ikd_tree ${PCL_LIBRARIES} ${OpenMP_LIBS})
 target_include_directories(ikd_tree
   PUBLIC include/ikd-Tree/ikd_Tree
 )
+# BONXAI
+
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/include/Bonxai)
 
 # IKFOM
 add_library(ikfom INTERFACE)
@@ -96,7 +104,8 @@ add_executable(${PROJECT_NAME}_multi_exec
 
 add_dependencies(${PROJECT_NAME}_multi_exec ${catkin_EXPORTED_TARGETS})
 
-target_link_libraries(${PROJECT_NAME}_multi_exec ${PROJECT_NAME} ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_multi_exec PRIVATE bonxai_core ${PROJECT_NAME} 
+${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 # Binaries
 install( TARGETS ${PROJECT_NAME}_multi_exec
