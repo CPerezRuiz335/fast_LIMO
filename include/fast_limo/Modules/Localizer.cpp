@@ -626,23 +626,15 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 
 	Config& config = Config::getInstance();
 
-  Mapper& MAP = Mapper::getInstance();
+  // Mapper& MAP = Mapper::getInstance();
 	BonxaiTree& Bonx = BonxaiTree::getInstance();
 
 
-	if (not MAP.exists()) {
+	if (not Bonx.exists()) {
 		ekfom_data.h_x = Eigen::MatrixXd::Zero(0, 12);
 		ekfom_data.h.resize(0);
 		return;
 	}
-
-	MapPoints tmp = MAP.flatten();
-
-	// {
-		// SWRI_PROFILE("Clear add bonxai");
-	// Bonx.clear();
-	// Bonx.add(tmp);
-	// }
 
 	int N = pc2match_->size();
 
@@ -651,62 +643,36 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 
 	State S(updated_state);
 
-	float maxSqrtDist(-1); 
-
-{
-	SWRI_PROFILE("Fast_LIMO_matches");
-	#pragma omp parallel for num_threads(6)
-	for (int i = 0; i < N; i++) {
-		auto p = pc2match_->points[i];
-		Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
-		Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
-
-		MapPoints near_points;
-		std::vector<float> pointSearchSqDis(config.ikfom.mapping.NUM_MATCH_POINTS);
-		MAP.knn(MapPoint(g(0), g(1), g(2)), 
-		        config.ikfom.mapping.NUM_MATCH_POINTS,
-						near_points,
-						pointSearchSqDis);
+	#pragma omp parallel num_threads(6) {
 		
-		if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
-		    or pointSearchSqDis.back() > 2)
-					continue;
-		
-		maxSqrtDist = std::max(maxSqrtDist, pointSearchSqDis.back());
-		
-		Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
-		if (not algorithms::estimate_plane(p_abcd, near_points, config.ikfom.mapping.PLANE_THRESHOLD))
-			continue;
-		
-		chosen[i] = true;
-		matches[i] = std::make_pair(g, p_abcd);
+		#pragma omp parallel for schedule(dynamic)
+		for (int i = 0; i < N; i++) {
+			auto p = pc2match_->points[i];
+			Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
+			Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
 
-		// std::cout << "IKDTREE" << std::endl;
-		// std::cout << "global" << i << " x: " << g(0) << " y: " << g(1) << " z: " << g(2) << "\n";
-		// for (int i = 0; i < near_points.size(); i++) {
-			// auto pp = near_points[i];
-			// std::cout << "p" << i << " x: " << pp.x << " y: " << pp.y << " z: " << pp.z << "\n";
-			// std::cout << "dist: " << pointSearchSqDis[i] << "\n";
-		// }
-
-		// near_points.clear();
-		// pointSearchSqDis.clear();
-
-		// Bonx.knn(MapPoint(g(0), g(1), g(2)), config.ikfom.mapping.NUM_MATCH_POINTS, near_points, pointSearchSqDis);
-		// std::cout << "BONXAI" << std::endl;
-		// std::cout << "global" << i << " x: " << g(0) << " y: " << g(1) << " z: " << g(2) << "\n";
-
-		// std::cout << "near_points size: " << near_points.size() << std::endl;
-		// std::cout << "sqDoist size: " << pointSearchSqDis.size() << std::endl;
-
-		// for (int i = 0; i < near_points.size(); i++) {
-			// auto pp = near_points[i];
-			// std::cout << "p" << i << " x: " << pp.x << " y: " << pp.y << " z: " << pp.z << "\n";
-			// std::cout << "dist: " << pointSearchSqDis[i] << "\n";
-		// }
+			MapPoints near_points;
+			std::vector<float> pointSearchSqDis(config.ikfom.mapping.NUM_MATCH_POINTS);
+			MAP.knn(MapPoint(g(0), g(1), g(2)), 
+							config.ikfom.mapping.NUM_MATCH_POINTS,
+							near_points,
+							pointSearchSqDis);
+			
+			if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
+					or pointSearchSqDis.back() > 2)
+						continue;
+			
+			maxSqrtDist = std::max(maxSqrtDist, pointSearchSqDis.back());
+			
+			Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
+			if (not algorithms::estimate_plane(p_abcd, near_points, config.ikfom.mapping.PLANE_THRESHOLD))
+				continue;
+			
+			chosen[i] = true;
+			matches[i] = std::make_pair(g, p_abcd);
+		}
 
 	}
-}
 
 	std::vector<Match> clean_matches;
 	MatchPointCloud::Ptr point_normals(boost::make_shared<MatchPointCloud>());
@@ -716,18 +682,18 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 		if (chosen[i]) {
 			clean_matches.push_back(matches[i]);
 
-			if (config.debug) {
-				MatchPoint p;
-				p.x = matches[i].first.x();
-				p.y = matches[i].first.y();
-				p.z = matches[i].first.z();
-				p.intensity = 0.;
-				p.normal_x = matches[i].second(0);
-				p.normal_y = matches[i].second(1);
-				p.normal_z = matches[i].second(2);
+			// if (config.debug) {
+			// 	MatchPoint p;
+			// 	p.x = matches[i].first.x();
+			// 	p.y = matches[i].first.y();
+			// 	p.z = matches[i].first.z();
+			// 	p.intensity = 0.;
+			// 	p.normal_x = matches[i].second(0);
+			// 	p.normal_y = matches[i].second(1);
+			// 	p.normal_z = matches[i].second(2);
 
-				point_normals->points.push_back(p);
-			}
+			// 	point_normals->points.push_back(p);
+			// }
 		}
 	}
 
@@ -737,8 +703,6 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 	ekfom_data.h_x = Eigen::MatrixXd::Zero(clean_matches.size(), 12);
 	ekfom_data.h.resize(clean_matches.size());	
 
-{
-	SWRI_PROFILE("Create_H");
 	// For each match, calculate its derivative and distance
 	#pragma omp parallel for num_threads(3)
 	for (int i = 0; i < clean_matches.size(); ++i) {
@@ -774,7 +738,6 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 
 		ekfom_data.h(i) = -dist;
 	}
-}
 }
 
 Eigen::Matrix<double, 24, 1> Localizer::get_f(state_ikfom &s,
