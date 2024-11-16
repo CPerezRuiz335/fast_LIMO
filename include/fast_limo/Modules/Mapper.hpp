@@ -136,7 +136,8 @@ namespace fast_limo {
 
   typedef std::priority_queue<Task, std::vector<Task>, CompareTask> PriorityQueue;
 
-  inline float squaredDistance(float x1, float y1, float z1, float x2, float y2, float z2) {
+  inline float squaredDistance(const float& x1, const float& y1, const float& z1,
+                          const float& x2, const float& y2, const float& z2) {
     float dx = x2 - x1;
     float dy = y2 - y1;
     float dz = z2 - z1;
@@ -147,6 +148,7 @@ namespace fast_limo {
   class BonxaiTree {
     public:
       std::vector<Bonxai::CoordT> coords;
+      std::vector<int> arr;
 
       Bonxai::VoxelGrid<MapPoint> map;
 
@@ -199,6 +201,7 @@ namespace fast_limo {
 
 
 typedef IKDTree Mapper;
+
 
 }
 

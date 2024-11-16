@@ -104,8 +104,6 @@ BonxaiTree::BonxaiTree() : map(0.2) {
     }
   };
 
- std::cout << "EMPIEZA EL BFS" << std::endl;
-
   // Define the six possible movement directions (left, right, up, down, forward, backward)
     const std::vector<std::tuple<int, int, int>> directions = {
       {-1, -1, -1}, {-1, -1, 0}, {-1, -1, 1},
@@ -157,7 +155,9 @@ BonxaiTree::BonxaiTree() : map(0.2) {
       }
     }
 
-  std::cout << "ACABA EL BFS" << std::endl;
+    for (int i = 0; i <= 8*2+1; i++) {
+      arr.push_back(i*i*i);
+    }
 }
 
 
@@ -211,9 +211,18 @@ void BonxaiTree::knn(const MapPoint& p,
     
 }
 
+inline float l2_dist_pow2(const float& x1, const float& y1, const float& z1,
+                          const float& x2, const float& y2, const float& z2) {
+  float dx = x2 - x1;
+  float dy = y2 - y1;
+  float dz = z2 - z1;
+  return dx * dx + dy * dy + dz * dz;
+}
+
+
 void BonxaiTree::add(PointCloudT::Ptr& pc, double time, bool downsample) {
-  std::cout << "BONXAI TREE" << std::endl;
-  
+  static Eigen::Vector3f leaf_size(0.2, 0.2, 0.2);
+
   if (pc->points.size() < 1)
     return;
 
@@ -226,12 +235,22 @@ void BonxaiTree::add(PointCloudT::Ptr& pc, double time, bool downsample) {
   Accessor accessor = map.createAccessor();
   for (const auto& p : map_vec) {
       Bonxai::CoordT coord = map.posToCoord(p.x, p.y, p.z);
-      MapPoint* value_ptr = accessor.value( coord );
+      MapPoint* pn = accessor.value( coord );
       
-      if (value_ptr == nullptr) {
+      if (true) {
         accessor.setValue( coord, p );
       } else {
-        accessor.setValue( coord, chooseClosest(coord, *value_ptr, p) );
+        Eigen::Vector3f point = Eigen::Vector3f(p.x, p.y, p.z);
+        Eigen::Vector3f centroid = Eigen::Vector3f(coord.x, coord.y, coord.z);
+        Eigen::Vector3f sign_vec = point.unaryExpr([](float v) { 
+            return (v >= 0.0 ? 1.f : -1.f); 
+        });
+
+        centroid += (leaf_size/2).cwiseProduct(sign_vec);
+
+        if (l2_dist_pow2(centroid.x(), centroid.y(), centroid.z(), p.x, p.y, p.z) 
+            < l2_dist_pow2(centroid.x(), centroid.y(), centroid.z(), pn->x, pn->y, pn->z))
+          accessor.setValue( coord, p );
       }
     }
 

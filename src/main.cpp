@@ -101,6 +101,8 @@ int main(int argc, char** argv) {
     // Declare the one and only Localizer and Mapper objects
     fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
     fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
+    fast_limo::BonxaiTree::getInstance();
+
 
     // Setup config parameters
     fast_limo::Config& config = Config::getInstance();

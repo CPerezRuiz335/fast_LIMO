@@ -45,9 +45,6 @@ void Localizer::init() {
 
 	Config& config = Config::getInstance();
 
-	// Update Mapper config
-	Mapper& map = Mapper::getInstance();
-
 	// Initialize Iterated Kalman Filter on Manifolds
 	init_iKFoM();
 
@@ -188,8 +185,9 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 		// Add scan to map
 		{
 			SWRI_PROFILE("Update_Map");
-		fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
-		map.add(final_scan_, scan_stamp_);
+			BonxaiTree& map = BonxaiTree::getInstance();
+			map.add(final_scan_, scan_stamp_);
+			// Mapper::getInstance().add(final_scan_, scan_stamp_);
 		}
 
 	} else {
@@ -621,12 +619,14 @@ bool Localizer::propagatedFromTimeRange(double start_time, double end_time,
 }
 
 
+#include <unistd.h>
+
 void Localizer::h_share_model(state_ikfom &updated_state,
 							  esekfom::dyn_share_datastruct<double> &ekfom_data) {
 
 	Config& config = Config::getInstance();
 
-  // Mapper& MAP = Mapper::getInstance();
+  Mapper& MAP = Mapper::getInstance();
 	BonxaiTree& Bonx = BonxaiTree::getInstance();
 
 
@@ -643,33 +643,89 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 
 	State S(updated_state);
 
-	#pragma omp parallel num_threads(6) {
-		
-		#pragma omp parallel for schedule(dynamic)
-		for (int i = 0; i < N; i++) {
-			auto p = pc2match_->points[i];
-			Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
-			Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
+	// KNN
+	std::vector<Bonxai::CoordT> neighbors = Bonx.coords;
+	std::vector<int> arr = Bonx.arr;
 
-			MapPoints near_points;
-			std::vector<float> pointSearchSqDis(config.ikfom.mapping.NUM_MATCH_POINTS);
-			MAP.knn(MapPoint(g(0), g(1), g(2)), 
-							config.ikfom.mapping.NUM_MATCH_POINTS,
-							near_points,
-							pointSearchSqDis);
+	{
+		SWRI_PROFILE("KNN")
+	
+		#pragma omp parallel num_threads(15)
+		{
+			Accessor accessor = Bonx.map.createAccessor();
 			
-			if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
-					or pointSearchSqDis.back() > 2)
-						continue;
-			
-			maxSqrtDist = std::max(maxSqrtDist, pointSearchSqDis.back());
-			
-			Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
-			if (not algorithms::estimate_plane(p_abcd, near_points, config.ikfom.mapping.PLANE_THRESHOLD))
-				continue;
-			
-			chosen[i] = true;
-			matches[i] = std::make_pair(g, p_abcd);
+			#pragma omp for
+			for (int i = 0; i < N; i++) {
+				auto p = pc2match_->points[i];
+				Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
+				Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
+
+				// KNN
+				PriorityQueue q;
+				Bonxai::CoordT coord = Bonx.map.posToCoord(g.x(), g.y(), g.z());
+
+				int k(0);
+				bool stop(false);
+				for (int j = 0; j < neighbors.size(); j++) {
+					Bonxai::CoordT tmp = coord + neighbors[j];
+
+					MapPoint* pn = accessor.value(tmp);
+
+					if (j == arr[k] and q.size() >= 5) {
+						stop = true;
+						j++;
+					}
+
+					if (pn == nullptr) continue;
+
+					double sqDist = squaredDistance(pn->x, pn->y, pn->z, g.x(), g.y(), g.z());
+					q.emplace(sqDist, *pn);
+
+					if (stop) break;
+				}
+				
+				std::vector<float> pointSearchSqDis;
+				MapPoints near_points;
+				if (q.size() < 5) {
+					continue;
+				} else {
+					for (int i = 0; i < 5; i++) {
+						Task t = q.top();
+						near_points.push_back(t.point);
+						pointSearchSqDis.push_back(t.distance);
+
+						q.pop();
+					}
+				} 
+
+				Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
+				if (not algorithms::estimate_plane(p_abcd, near_points, config.ikfom.mapping.PLANE_THRESHOLD))
+					continue;
+				
+				
+				chosen[i] = true;
+				matches[i] = std::make_pair(g, p_abcd);
+				
+				// std::cout << "BONXAI" << "\n";
+				// for (int i = 0 ; i < near_points.size(); i++) {
+				// 	std::cout << "x: " << near_points[i].x << " y: " << near_points[i].y << " z: " << near_points[i].z << "\n"; 
+				// 	std::cout << "distance: " << pointSearchSqDis[i] << "\n";
+				// }
+
+				// near_points.clear();
+				// pointSearchSqDis.clear();
+				// MAP.knn(MapPoint(g(0), g(1), g(2)), 
+		    //     config.ikfom.mapping.NUM_MATCH_POINTS,
+				// 		near_points,
+				// 		pointSearchSqDis);
+
+				// std::cout << "IKDTREE" << "\n";
+				// for (int i = 0 ; i < near_points.size(); i++) {
+				// 	std::cout << "x: " << near_points[i].x << " y: " << near_points[i].y << " z: " << near_points[i].z << "\n"; 
+				// 	std::cout << "distance: " << pointSearchSqDis[i] << "\n";
+				// }
+				// std::cout << std::endl;
+			}
 		}
 
 	}
