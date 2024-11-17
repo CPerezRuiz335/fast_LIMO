@@ -96,3 +96,9 @@ iKFoM:  # Iterative Kalman Filter on Manifolds lib
     accel: 1.53e-2
     bias_gyro: 1.54e-5
     bias_accel: 3.38e-4
+
+iOctree:
+  order: false
+  min_extent: .2
+  bucket_size: 2
+  downsample: true

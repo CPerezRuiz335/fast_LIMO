@@ -46,7 +46,12 @@ void Localizer::init() {
 	Config& config = Config::getInstance();
 
 	// Update Mapper config
-	Mapper& map = Mapper::getInstance();
+	// Mapper& map = Mapper::getInstance();
+
+	map.set_order(config.ioctree.order);
+  map.set_min_extent(config.ioctree.min_extent); // float
+  map.set_bucket_size(config.ioctree.bucket_size); // size_t
+  map.set_down_size(config.ioctree.downsample);  // bool
 
 	// Initialize Iterated Kalman Filter on Manifolds
 	init_iKFoM();
@@ -177,13 +182,14 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 			pcl::transformPointCloud(*deskewed_Xt2_pc, *final_raw_scan_,
 			                         state_.get_RT() * state_.get_extr_RT());
 		
-			final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
+			// final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
 		}
 
 
 		// Add scan to map
-		fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
-		map.add(final_scan_, scan_stamp_);
+		// fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
+		// map.add(final_scan_, scan_stamp_);
+		map.update(final_scan_->points, config.ioctree.downsample);
 
 	} else {
 		std::cout << "-------------- FAST_LIMO::NULL ITERATION --------------\n";
@@ -619,14 +625,17 @@ bool Localizer::propagatedFromTimeRange(double start_time, double end_time,
 void Localizer::h_share_model(state_ikfom &updated_state,
 							  esekfom::dyn_share_datastruct<double> &ekfom_data) {
 	
+	static int i(0);
 	Config& config = Config::getInstance();
 
-  Mapper& MAP = Mapper::getInstance();
-	if (not MAP.exists()) {
-		ekfom_data.h_x = Eigen::MatrixXd::Zero(0, 12);
-		ekfom_data.h.resize(0);
+  // Mapper& MAP = Mapper::getInstance();
+	// if (not MAP.exists()) {
+		// ekfom_data.h_x = Eigen::MatrixXd::Zero(0, 12);
+		// ekfom_data.h.resize(0);
+		// return;
+	// }
+	if (i++ == 0)
 		return;
-	}
 
 	int N = pc2match_->size();
 
@@ -639,31 +648,42 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 
 
 	if (clean_matches.empty()) {
-		#pragma omp parallel for num_threads(5)
-		for (int i = 0; i < N; i++) {
-			auto p = pc2match_->points[i];
-			Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
-			Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
+		std::vector<int> indices(N);
+		std::iota(indices.begin(), indices.end(), 0);
+		
+		std::for_each(
+			std::execution::par_unseq,
+			indices.begin(),
+			indices.end(),
+			[&](int i) {
+				auto p = pc2match_->points[i];
+				Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
+				Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
 
-			MapPoints near_points;
-			std::vector<float> pointSearchSqDis(config.ikfom.mapping.NUM_MATCH_POINTS);
-			MAP.knn(MapPoint(g(0), g(1), g(2)), 
-							config.ikfom.mapping.NUM_MATCH_POINTS,
-							near_points,
-							pointSearchSqDis);
-			
-			if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
-					or pointSearchSqDis.back() > 2)
-						continue;
-			
-			Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
-			if (not algorithms::estimate_plane(p_abcd, near_points, config.ikfom.mapping.PLANE_THRESHOLD))
-				continue;
-			
-			chosen[i] = true;
-			matches[i] = Match(bl4_point, g, p_abcd);
-		}
-	
+				MapPoints near_points;
+				std::vector<float> pointSearchSqDis(config.ikfom.mapping.NUM_MATCH_POINTS);
+				// MAP.knn(MapPoint(g(0), g(1), g(2)), 
+				// 				config.ikfom.mapping.NUM_MATCH_POINTS,
+				// 				near_points,
+				// 				pointSearchSqDis);
+				map.knnNeighbors(MapPoint(g(0), g(1), g(2)),
+												config.ikfom.mapping.NUM_MATCH_POINTS,
+												near_points,
+												pointSearchSqDis);
+				
+				if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
+						or pointSearchSqDis.back() > 2)
+							return;
+				
+				Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
+				if (not algorithms::estimate_plane(p_abcd, near_points, config.ikfom.mapping.PLANE_THRESHOLD))
+					return;
+				
+				chosen[i] = true;
+				matches[i] = Match(bl4_point, g, p_abcd);
+			}
+		);
+
 		// clean_matches.clear();
 		point_normals->points.resize(clean_matches.size());
 

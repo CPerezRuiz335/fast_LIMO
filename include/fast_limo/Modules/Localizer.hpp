@@ -49,6 +49,7 @@
 #include <mutex>
 #include <queue>
 #include <algorithm>
+#include <execution>
 
 #include <utility>
 
@@ -67,6 +68,8 @@
 
 #include "fast_limo/Utils/Algorithms.hpp"
 #include "fast_limo/Objects/Imu.hpp"
+
+#include "octree2/Octree.h"
 
 
 namespace fast_limo {
@@ -112,6 +115,7 @@ namespace fast_limo {
 	class Localizer {
 
 		private:
+			thuni::Octree map;
 
 			PointCloudT::Ptr pc2match_; // pointcloud to match in Xt2 (last_state) frame
 			esekfom::esekf<state_ikfom, 12, input_ikfom> iKFoM_;

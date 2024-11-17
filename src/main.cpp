@@ -143,9 +143,9 @@ int main(int argc, char** argv) {
     loc.init();
 
     // Start spinning (async)
-    ros::spin();
-    // ros::AsyncSpinner spinner(0);
-    // spinner.start();
+    // ros::spin();
+    ros::AsyncSpinner spinner(0);
+    spinner.start();
 
     ros::waitForShutdown();
 

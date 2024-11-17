@@ -99,6 +99,13 @@ namespace fast_limo {
       double cov_bias_acc;        // Accelerometer bias covariance
     } ikfom;
 
+    struct iOctree {
+      bool order;
+      float min_extent;
+      int bucket_size;
+      bool downsample;
+    } ioctree;
+
     // Flags
     bool gravity_align;    // Gravity alignment flag
     bool calibrate_accel;  // Accelerometer calibration flag
@@ -235,6 +242,14 @@ namespace fast_limo {
       ikfom.LIMITS = vector<double>(23, ikfom_limits);
 
       nh.getParam("start_rosbag", start_rosbag);
+
+      // iOctree
+      nh.getParam("iOctree/order", ioctree.order);
+      nh.getParam("iOctree/min_extent", ioctree.min_extent);
+      nh.getParam("iOctree/bucket_size", ioctree.bucket_size);
+      nh.getParam("iOctree/downsample", ioctree.downsample);
+
+
     }
 
     static Config& getInstance() {

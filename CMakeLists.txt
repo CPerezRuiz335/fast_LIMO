@@ -27,6 +27,7 @@ endif(OPENMP_FOUND)
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
+find_package(TBB REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -51,6 +52,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INLCUDE_DIRS}
   ${PCL_INLCUDE_DIRS}
+  
 )
 
 # Not all machines have <cpuid.h> available
@@ -86,8 +88,16 @@ add_library(${PROJECT_NAME}
             include/fast_limo/Modules/Localizer.cpp
             include/fast_limo/Modules/Mapper.cpp
             )
-target_compile_options(${PROJECT_NAME} PRIVATE ${OpenMP_FLAGS})
-target_link_libraries(${PROJECT_NAME} ${PCL_LIBRARIES} ${OpenMP_LIBS} ikfom ikd_tree)
+
+target_compile_options(${PROJECT_NAME}
+  PRIVATE ${OpenMP_FLAGS})
+
+target_link_libraries(${PROJECT_NAME}
+  PRIVATE ${TBB_IMPORTED_TARGETS} 
+  ${PCL_LIBRARIES} 
+  ${OpenMP_LIBS} 
+  ikfom 
+  ikd_tree)
 
 # ROS execs
 add_executable(${PROJECT_NAME}_multi_exec
@@ -96,7 +106,10 @@ add_executable(${PROJECT_NAME}_multi_exec
 
 add_dependencies(${PROJECT_NAME}_multi_exec ${catkin_EXPORTED_TARGETS})
 
-target_link_libraries(${PROJECT_NAME}_multi_exec ${PROJECT_NAME} ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_multi_exec 
+  ${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES} )
 
 # Binaries
 install( TARGETS ${PROJECT_NAME}_multi_exec
