@@ -672,7 +672,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 												pointSearchSqDis);
 				
 				if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
-						or pointSearchSqDis.back() > 2)
+						or pointSearchSqDis.back() > config.ikfom.mapping.MAX_DIST_PLANE)
 							return;
 				
 				Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();

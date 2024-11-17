@@ -17,15 +17,15 @@ debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visu
 verbose: true   # print debug/performance board
 start_rosbag: -1
 
-estimate_extrinsics: true   # continuous estimation of LiDAR-IMU extrinsics 
+estimate_extrinsics: false   # continuous estimation of LiDAR-IMU extrinsics 
 time_offset: true           # whether to take into account a possible sync offset between IMU and LiDAR (set to true if they are not properly in sync)
 end_of_sweep: false          # whether the sweep reference time is w.r.t. the start or the end of the scan (only applies to VELODYNE/OUSTER)
 
 calibration:  # automatic IMU calibration (if all set to false, no calibration will be done)
-  gravity_align: false     # estimate gravity vector
-  accel: false             # estimate lin. accel. bias
-  gyro: false              # estimate ang. vel. bias
-  time: 0.               # time to estimate (during this time, the robot must be at stand still)
+  gravity_align: true     # estimate gravity vector
+  accel: true             # estimate lin. accel. bias
+  gyro: true              # estimate ang. vel. bias
+  time: .5               # time to estimate (during this time, the robot must be at stand still)
 
 extrinsics: # w.r.t baselink [SI]
   imu:
@@ -80,7 +80,7 @@ iKFoM:  # Iterative Kalman Filter on Manifolds lib
 
   Mapping:
     NUM_MATCH_POINTS: 5           # num of points that constitute a match
-    MAX_DIST_PLANE: 2.0           # [m] max distance between points of every match
+    MAX_DIST_PLANE: 2           # [m] max distance between points of every match
     PLANES_THRESHOLD: 5.0e-2      # [m] threshold to consider if match points are part of a plane 
     LocalMapping: false            # whether to keep a fixed size map (moving with the robot) or a limitless map (when active, it limits the memory in use)
     
