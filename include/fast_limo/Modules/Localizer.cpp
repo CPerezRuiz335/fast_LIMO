@@ -639,7 +639,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 
 
 	if (clean_matches.empty()) {
-		#pragma omp parallel for num_threads(8)
+		#pragma omp parallel for num_threads(5)
 		for (int i = 0; i < N; i++) {
 			auto p = pc2match_->points[i];
 			Eigen::Vector4f bl4_point(p.x, p.y, p.z, 1.);
@@ -691,7 +691,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 	ekfom_data.h.resize(clean_matches.size());	
 
 	// For each match, calculate its derivative and distance
-	#pragma omp parallel for num_threads(8)
+	#pragma omp parallel for num_threads(5)
 	for (int i = 0; i < clean_matches.size(); ++i) {
 		Match match = clean_matches[i];
 		Eigen::Vector4f p4_imu   = S.get_RT_inv() * match.global;
