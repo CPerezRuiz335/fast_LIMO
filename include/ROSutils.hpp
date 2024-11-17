@@ -23,7 +23,6 @@
 // Fast LIMO
 #include "fast_limo/Objects/Imu.hpp"
 #include "fast_limo/Modules/Localizer.hpp"
-#include "fast_limo/Modules/Mapper.hpp"
 
 // ROS
 #include <ros/ros.h>

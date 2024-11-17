@@ -86,7 +86,6 @@ target_include_directories(ikfom INTERFACE
 # Fast LIMO
 add_library(${PROJECT_NAME} 
             include/fast_limo/Modules/Localizer.cpp
-            include/fast_limo/Modules/Mapper.cpp
             )
 
 target_compile_options(${PROJECT_NAME}

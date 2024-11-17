@@ -628,12 +628,6 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 	static int i(0);
 	Config& config = Config::getInstance();
 
-  // Mapper& MAP = Mapper::getInstance();
-	// if (not MAP.exists()) {
-		// ekfom_data.h_x = Eigen::MatrixXd::Zero(0, 12);
-		// ekfom_data.h.resize(0);
-		// return;
-	// }
 	if (i++ == 0)
 		return;
 

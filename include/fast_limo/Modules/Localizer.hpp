@@ -61,7 +61,6 @@
 #include <boost/range/adaptor/filtered.hpp>
 
 // #include "fast_limo/Common.hpp"
-#include "fast_limo/Modules/Mapper.hpp"
 #include "fast_limo/Objects/State.hpp"
 #include "fast_limo/Utils/Config.hpp"
 #include "fast_limo/Utils/PCL.hpp"
