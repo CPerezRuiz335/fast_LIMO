@@ -45,9 +45,6 @@ void Localizer::init() {
 
 	Config& config = Config::getInstance();
 
-	// Update Mapper config
-	// Mapper& map = Mapper::getInstance();
-
 	map.set_order(config.ioctree.order);
   map.set_min_extent(config.ioctree.min_extent); // float
   map.set_bucket_size(config.ioctree.bucket_size); // size_t
