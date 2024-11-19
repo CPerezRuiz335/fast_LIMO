@@ -21,8 +21,8 @@
 #include <signal.h>
 
 // Fast LIMO
-#include "fast_limo/Objects/Imu.hpp"
-#include "fast_limo/Modules/Localizer.hpp"
+#include "Objects/Imu.hpp"
+#include "Modules/Localizer.hpp"
 
 // ROS
 #include <ros/ros.h>

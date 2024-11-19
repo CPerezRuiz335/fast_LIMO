@@ -61,12 +61,12 @@
 #include <boost/range/adaptor/filtered.hpp>
 
 // #include "fast_limo/Common.hpp"
-#include "fast_limo/Objects/State.hpp"
-#include "fast_limo/Utils/Config.hpp"
-#include "fast_limo/Utils/PCL.hpp"
+#include "Objects/State.hpp"
+#include "Utils/Config.hpp"
+#include "Utils/PCL.hpp"
 
-#include "fast_limo/Utils/Algorithms.hpp"
-#include "fast_limo/Objects/Imu.hpp"
+#include "Utils/Algorithms.hpp"
+#include "Objects/Imu.hpp"
 
 #include "octree2/Octree.h"
 

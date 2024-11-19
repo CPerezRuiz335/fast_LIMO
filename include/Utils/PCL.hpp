@@ -43,7 +43,7 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(fast_limo::Point,
 typedef fast_limo::Point PointType;
 typedef pcl::PointXYZ MapPoint;
 typedef pcl::PointCloud<PointType> PointCloudT;
-typedef std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>> MapPoints;
+typedef std::vector<MapPoint> MapPoints;
 typedef std::vector<PointType, Eigen::aligned_allocator<PointType>> LocPoints;
 typedef pcl::PointXYZINormal MatchPoint;
 typedef pcl::PointCloud<MatchPoint> MatchPointCloud;

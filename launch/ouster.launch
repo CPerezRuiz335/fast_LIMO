@@ -2,7 +2,7 @@
 
     <arg name="rviz" default="false"/>
 
-    <node pkg="fast_limo" type="fast_limo_multi_exec" name="limovelo" output="screen">
+    <node pkg="fast_limo" type="fast_limo" name="limovelo" output="screen">
         <rosparam file="$(find fast_limo)/config/ouster.yaml" />
     </node>
 

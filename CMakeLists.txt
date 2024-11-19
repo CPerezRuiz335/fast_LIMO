@@ -1,34 +1,30 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(fast_limo)
+project(fast_limo VERSION 0.0.1)
 
-set(CMAKE_CXX_FLAGS "-std=c++17 -O3 -lm -lblas -llapack")
+# Set C++ standard and compiler flags
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -std=c++17 -pthread -fexceptions -O3 -lm -lblas -llapack")
 
-find_package( PCL 1.8 REQUIRED )
-include_directories(${PCL_INCLUDE_DIRS})
-add_definitions(${PCL_DEFINITIONS})
-link_directories(${PCL_LIBRARY_DIRS})
-
-message("PCL version: ${PCL_VERSION}")
-
-find_package( Eigen3 REQUIRED )
-include_directories(${EIGEN3_INCLUDE_DIR})
-
-include(FindOpenMP)
-if(OPENMP_FOUND)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+# Find OpenMP
+find_package(OpenMP QUIET)
+if(OpenMP_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-else(OPENMP_FOUND)
-  message("ERROR: OpenMP could not be found.")
-endif(OPENMP_FOUND)
+else()
+  message(WARNING "OpenMP not found.")
+endif()
 
-set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
-set(THREADS_PREFER_PTHREAD_FLAG TRUE)
-find_package(Threads REQUIRED)
+# Find Boost and TBB
+find_package(Boost REQUIRED COMPONENTS system)
 find_package(TBB REQUIRED)
 
+# Include Boost directories
+include_directories(${Boost_INCLUDE_DIRS})
+
+# Find Eigen3 and PCL
+find_package(Eigen3 REQUIRED)
+find_package(PCL 1.8 REQUIRED)
+
+# Find ROS packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   pcl_ros
@@ -39,77 +35,58 @@ find_package(catkin REQUIRED COMPONENTS
   tf2
 )
 
-catkin_package(
- INCLUDE_DIRS include
- LIBRARIES ${PROJECT_NAME}
- CATKIN_DEPENDS roscpp pcl_ros sensor_msgs geometry_msgs tf2 visualization_msgs nav_msgs
- DEPENDS EIGEN3 PCL
-)
-
+# Include directories
 include_directories(
   include
-  ${CMAKE_CURRENT_LIST_DIR}/include/ioctree
+  external/ioctree
   ${catkin_INCLUDE_DIRS}
-  ${EIGEN3_INLCUDE_DIRS}
-  ${PCL_INLCUDE_DIRS}
-  
+  ${PCL_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
 )
 
-# Not all machines have <cpuid.h> available
-set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-file(WRITE ${CMAKE_BINARY_DIR}/test_cpuid.cpp "#include <cpuid.h>")
-try_compile(HAS_CPUID ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR}/test_cpuid.cpp)
-file(REMOVE ${CMAKE_BINARY_DIR}/test_cpuid.cpp)
-if(HAS_CPUID)
-  add_compile_definitions(HAS_CPUID)
-endif()
-
-# IKD_TREE
-add_library(ikd_tree 
-              include/ikd-Tree/ikd_Tree/ikd_Tree.cpp
-            )
-
-target_link_libraries(ikd_tree ${PCL_LIBRARIES} ${OpenMP_LIBS})
-target_include_directories(ikd_tree
-  PUBLIC include/ikd-Tree/ikd_Tree
+# Catkin package configuration
+catkin_package(
+  CATKIN_DEPENDS
+    roscpp
+    pcl_ros
+    sensor_msgs
+    geometry_msgs
+    tf2
+    visualization_msgs
+    nav_msgs
+  DEPENDS PCL
+  INCLUDE_DIRS include
 )
 
 # IKFOM
-add_library(ikfom INTERFACE)
+add_library(IKFOM INTERFACE)
 
-target_link_libraries(ikfom INTERFACE ${PCL_LIBRARIES} ${OpenMP_LIBS})
-target_include_directories(ikfom INTERFACE
-  include/IKFoM/
-  include/IKFoM/IKFoM_toolkit 
+target_link_libraries(IKFOM INTERFACE ${PCL_LIBRARIES} ${OpenMP_LIBS})
+target_include_directories(IKFOM INTERFACE
+  external/IKFoM/
+  external/IKFoM/IKFoM_toolkit 
 )
 
-# Fast LIMO
-add_library(${PROJECT_NAME} 
-            include/fast_limo/Modules/Localizer.cpp
-            )
+# Collect source files
+set(SOURCE_FILES
+  src/main.cpp
+  include/Modules/Localizer.cpp
+)
 
-target_compile_options(${PROJECT_NAME}
-  PRIVATE ${OpenMP_FLAGS})
-
-target_link_libraries(${PROJECT_NAME}
-  PRIVATE ${TBB_IMPORTED_TARGETS} 
-  ${PCL_LIBRARIES} 
-  ${OpenMP_LIBS} 
-  ikfom 
-  ikd_tree)
-
-# ROS execs
-add_executable(${PROJECT_NAME}_multi_exec
-              src/main.cpp
-              )
-
-add_dependencies(${PROJECT_NAME}_multi_exec ${catkin_EXPORTED_TARGETS})
-
-target_link_libraries(${PROJECT_NAME}_multi_exec 
-  ${PROJECT_NAME}
+# Link libraries
+set(LINK_LIBRARIES
+  IKFOM
   ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES} )
+  ${PCL_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${TBB_IMPORTED_TARGETS}
+  ${OpenMP_LIBS}
+)
 
-# Binaries
-install( TARGETS ${PROJECT_NAME}_multi_exec
-         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION} )
+# Create executable
+add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+
+# Link the executable with libraries
+target_link_libraries(${PROJECT_NAME}
+  ${LINK_LIBRARIES}
+)

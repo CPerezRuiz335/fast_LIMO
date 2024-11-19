@@ -15,7 +15,7 @@
  along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "fast_limo/Modules/Localizer.hpp"
+#include "Modules/Localizer.hpp"
 
 
 using namespace fast_limo;
@@ -34,7 +34,7 @@ Localizer::Localizer() : scan_stamp_(0.0),
 												 imu_calibrated_(false) { 
 
 	original_scan_  = PointCloudT::ConstPtr (boost::make_shared<PointCloudT>());
-	deskew_scan_  = PointCloudT::ConstPtr (boost::make_shared<PointCloudT>());
+	deskew_scan_    = PointCloudT::ConstPtr (boost::make_shared<PointCloudT>());
 	pc2match_       = PointCloudT::Ptr (boost::make_shared<PointCloudT>());
 	final_raw_scan_ = PointCloudT::Ptr (boost::make_shared<PointCloudT>());
 	final_scan_     = PointCloudT::Ptr (boost::make_shared<PointCloudT>());
@@ -113,35 +113,41 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 	raw_pc->is_dense = false;
 	pcl::removeNaNFromPointCloud(*raw_pc, *raw_pc, idx);
 
-	// Crop Box Filter (1 m^2)
-	if (config.filters.crop_active) {
-		crop_filter_.setInputCloud(raw_pc);
-		crop_filter_.filter(*raw_pc);
-	}
-
 	// Distance & Time Rate filters
 	PointCloudT::Ptr input_pc(boost::make_shared<PointCloudT>());
 
-	for (int i = 0; i < raw_pc->size(); i++) {
-	  PointType p = raw_pc->points[i];
-		
-		if (config.filters.dist_active) {
-			if (Eigen::Vector3f(p.x, p.y, p.z).norm() <= config.filters.min_dist)
-				continue;
-		}
+	int index = 0;
+	std::copy_if(
+		raw_pc->points.begin(), 
+		raw_pc->points.end(), 
+		std::back_inserter(input_pc->points), 
+		[&](const PointType& p) mutable {
+				// Initialize pass flag
+				bool pass = true;
 
-		if (config.filters.rate_active) {
-			if (i % config.filters.rate_value != 0)
-				continue;
-		}
+				// Distance filter
+				if (config.filters.dist_active) {
+						if (Eigen::Vector3f(p.x, p.y, p.z).norm() <= config.filters.min_dist)
+								pass = false;
+				}
 
-		if (config.filters.fov_active) {
-			if (fabs(atan2(p.y, p.x)) >= config.filters.fov_angle)
-				continue;
-		}
+				// Rate filter
+				if (config.filters.rate_active) {
+						if (index % config.filters.rate_value != 0)
+								pass = false;
+				}
 
-		input_pc->push_back(p);
-	}
+				// Field of view filter
+				if (config.filters.fov_active) {
+						if (fabs(atan2(p.y, p.x)) >= config.filters.fov_angle)
+								pass = false;
+				}
+
+				++index; // Increment index
+
+				return pass;
+		}
+	);
 
 	if (config.debug)
 		original_scan_ = input_pc;
@@ -183,9 +189,6 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 		}
 
 
-		// Add scan to map
-		// fast_limo::Mapper& map = fast_limo::Mapper::getInstance();
-		// map.add(final_scan_, scan_stamp_);
 		map.update(final_scan_->points, config.ioctree.downsample);
 
 	} else {
@@ -509,8 +512,6 @@ PointCloudT::Ptr Localizer::deskewPointCloud(PointCloudT::Ptr& pc, double& start
 	scan_stamp_ = extract_point_time(deskewed_scan_->points.back()) + offset;
 
 	// IMU prior & deskewing 
-	// if (prev_scan_stamp_ <= 0.) 
-		// prev_scan_stamp_ = scan_stamp_ - 0.1;
 	States frames = integrateImu(prev_scan_stamp_, scan_stamp_); // baselink/body frames
 
 	if (frames.size() < 1) {
@@ -525,28 +526,34 @@ PointCloudT::Ptr Localizer::deskewPointCloud(PointCloudT::Ptr& pc, double& start
 
 	last_state_ = fast_limo::State(iKFoM_.get_x()); // baselink/body frame
 
-	#pragma omp parallel for num_threads(config.num_threads)
-	for (int k = 0; k < deskewed_scan_->points.size(); k++) {
+	std::vector<int> indices(deskewed_scan_->points.size());
+	std::iota(indices.begin(), indices.end(), 0); // Generate indices 0, 1, ..., N-1
 
-		int i_f = algorithms::binary_search_tailored(frames, extract_point_time(deskewed_scan_->points[k])+offset);
+	std::for_each(
+			std::execution::par,
+			indices.begin(),
+			indices.end(),
+			[&](int k) {
+				int i_f = algorithms::binary_search_tailored(frames, extract_point_time(deskewed_scan_->points[k]) + offset);
 
-		State X0 = frames[i_f];
-		X0.update(extract_point_time(deskewed_scan_->points[k]) + offset);
+				State X0 = frames[i_f];
+				X0.update(extract_point_time(deskewed_scan_->points[k]) + offset);
 
-		Eigen::Matrix4f T = X0.get_RT() * X0.get_extr_RT();
+				Eigen::Matrix4f T = X0.get_RT() * X0.get_extr_RT();
 
-		// world frame deskewed pc
-		auto pt = deskewed_scan_->points[k]; // lidar frame
-		pt.getVector4fMap()[3] = 1.;
-		pt.getVector4fMap() = T * pt.getVector4fMap(); // world/global frame
+				// World frame deskewed pc
+				auto pt = deskewed_scan_->points[k]; // lidar frame
+				pt.getVector4fMap()[3] = 1.0;
+				pt.getVector4fMap() = T * pt.getVector4fMap(); // world/global frame
 
-		// Xt2 frame deskewed pc
-		auto pt2 = deskewed_scan_->points[k];
-		pt2.getVector4fMap() = last_state_.get_extr_RT_inv() * last_state_.get_RT_inv() * pt.getVector4fMap(); // Xt2 frame
-		pt2.intensity = pt.intensity;
+				// Xt2 frame deskewed pc
+				auto pt2 = deskewed_scan_->points[k];
+				pt2.getVector4fMap() = last_state_.get_extr_RT_inv() * last_state_.get_RT_inv() * pt.getVector4fMap(); // Xt2 frame
+				pt2.intensity = pt.intensity;
 
-		deskewed_Xt2_scan->points[k] = pt2;
-	}
+				deskewed_Xt2_scan->points[k] = pt2;
+			}
+	);
 
 	// debug info
 	deskew_size_ = deskewed_Xt2_scan->points.size(); 
@@ -643,7 +650,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 		std::iota(indices.begin(), indices.end(), 0);
 		
 		std::for_each(
-			std::execution::par_unseq,
+			std::execution::par_unseqcd ,
 			indices.begin(),
 			indices.end(),
 			[&](int i) {
@@ -652,15 +659,11 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 				Eigen::Vector4f g = (S.get_RT() * S.get_extr_RT()) * bl4_point; 
 
 				MapPoints near_points;
-				std::vector<float> pointSearchSqDis(config.ikfom.mapping.NUM_MATCH_POINTS);
-				// MAP.knn(MapPoint(g(0), g(1), g(2)), 
-				// 				config.ikfom.mapping.NUM_MATCH_POINTS,
-				// 				near_points,
-				// 				pointSearchSqDis);
+				std::vector<float> pointSearchSqDis;
 				map.knnNeighbors(MapPoint(g(0), g(1), g(2)),
-												config.ikfom.mapping.NUM_MATCH_POINTS,
-												near_points,
-												pointSearchSqDis);
+												 config.ikfom.mapping.NUM_MATCH_POINTS,
+												 near_points,
+												 pointSearchSqDis);
 				
 				if (near_points.size() < config.ikfom.mapping.NUM_MATCH_POINTS 
 						or pointSearchSqDis.back() > config.ikfom.mapping.MAX_DIST_PLANE)
@@ -675,7 +678,6 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 			}
 		);
 
-		// clean_matches.clear();
 		point_normals->points.resize(clean_matches.size());
 
 		for (int i = 0; i < N; i++) {
@@ -685,6 +687,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 			if (config.debug)
 				point_normals->points.push_back(matches[i].toPointXYZINormal());
 		}
+
 	} else {
 		point_normals->points.resize(clean_matches.size());
 
@@ -693,6 +696,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 			if (config.debug)
 				point_normals->points.push_back(match.toPointXYZINormal());
 		}
+		
 	}
 
 	if (config.debug)

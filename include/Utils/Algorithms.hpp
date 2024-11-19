@@ -42,7 +42,7 @@
 #include <mutex>
 #include <queue>
 
-#include "fast_limo/Utils/PCL.hpp"
+#include "Utils/PCL.hpp"
 #include <Eigen/Dense>
 
 template <typename T>
@@ -58,7 +58,7 @@ namespace fast_limo {
 	namespace algorithms {
 
 		template <typename Array>
-		int binary_search_tailored(const Array& sorted_v, double t) {
+		inline int binary_search_tailored(const Array& sorted_v, double t) {
 			int high, mid, low;
 			low = 0; high = sorted_v.size()-1;
 			
@@ -72,7 +72,7 @@ namespace fast_limo {
 			return high;
 		}
 
-		bool estimate_plane(Eigen::Vector4f& pabcd, const MapPoints& pts, double& thresh){
+		inline bool estimate_plane(Eigen::Vector4f& pabcd, const MapPoints& pts, double& thresh){
 			int NUM_MATCH_POINTS = pts.size();
 			Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> A(NUM_MATCH_POINTS, 3);
 			Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> b(NUM_MATCH_POINTS, 1);
