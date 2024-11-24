@@ -10,14 +10,14 @@ typedef MTK::vect<1, double> vect1;
 typedef MTK::vect<2, double> vect2;
 
 MTK_BUILD_MANIFOLD(state_ikfom,
-  ((vect3, pos))
-  ((SO3, rot))
-  ((SO3, offset_R_L_I))
-  ((vect3, offset_T_L_I))
-  ((vect3, vel))
-  ((vect3, bg))
-  ((vect3, ba))
-  ((S2, grav))
+  ((vect3, pos))                 // 0
+  ((SO3, rot))                   // 3
+  ((SO3, offset_R_L_I))          // 6
+  ((vect3, offset_T_L_I))        // 9
+  ((vect3, vel))                 // 12
+  ((vect3, bg))                  // 15
+  ((vect3, ba))                  // 18
+  ((S2, grav))                   // 21
 );
 
 MTK_BUILD_MANIFOLD(input_ikfom,

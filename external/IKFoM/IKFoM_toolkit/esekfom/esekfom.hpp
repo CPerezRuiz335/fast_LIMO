@@ -118,9 +118,9 @@ public:
 	typedef SparseMatrix<scalar_type> spMt;
 	typedef Matrix<scalar_type, n, 1> vectorized_state;
 	typedef Matrix<scalar_type, m, 1> flatted_state;
-	typedef flatted_state processModel(state &, const input &);
-	typedef Eigen::Matrix<scalar_type, m, n> processMatrix1(state &, const input &);
-	typedef Eigen::Matrix<scalar_type, m, process_noise_dof> processMatrix2(state &, const input &);
+	typedef flatted_state processModel(state &, const input &, const double &);
+	typedef Eigen::Matrix<scalar_type, m, n> processMatrix1(state &, const input &, const double &);
+	typedef Eigen::Matrix<scalar_type, m, process_noise_dof> processMatrix2(state &, const input &, const double &);
 	typedef Eigen::Matrix<scalar_type, process_noise_dof, process_noise_dof> processnoisecovariance;
 	typedef measurement measurementModel(state &, bool &);
 	typedef measurement measurementModel_share(state &, share_datastruct<state, measurement, measurement_noise_dof> &);
@@ -133,16 +133,7 @@ public:
 	typedef Eigen::Matrix<scalar_type, measurement_noise_dof, measurement_noise_dof> measurementnoisecovariance;
 	typedef Eigen::Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic> measurementnoisecovariance_dyn;
 
-	esekf(const state &x = state(),
-		const cov  &P = cov::Identity()): x_(x), P_(P){
-	#ifdef USE_sparse
-		SparseMatrix<scalar_type> ref(n, n);
-		ref.setIdentity();
-		l_ = ref;
-		f_x_2 = ref;
-		f_x_1 = ref;
-	#endif
-	};
+	esekf(const state &x = state(), const cov  &P = cov::Identity()): x_(x), P_(P) {};
 
 	//receive system-specific models and their differentions
 	//for measurement as an Eigen matrix whose dimension is changing.
@@ -177,11 +168,11 @@ public:
 
 	// iterated error state EKF propogation
 	void predict(double &dt, processnoisecovariance &Q, const input &i_in){
-		flatted_state f_ = f(x_, i_in);
-		cov_ f_x_ = f_x(x_, i_in);
+		flatted_state f_ = f(x_, i_in, dt);
+		cov_ f_x_ = f_x(x_, i_in, dt);
 		cov f_x_final;
 
-		Matrix<scalar_type, m, process_noise_dof> f_w_ = f_w(x_, i_in);
+		Matrix<scalar_type, m, process_noise_dof> f_w_ = f_w(x_, i_in, dt);
 		Matrix<scalar_type, n, process_noise_dof> f_w_final;
 		state x_before = x_;
 		x_.oplus(f_, dt);

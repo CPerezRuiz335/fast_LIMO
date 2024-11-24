@@ -185,7 +185,7 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 			pcl::transformPointCloud(*deskewed_Xt2_pc, *final_raw_scan_,
 			                         state_.get_RT() * state_.get_extr_RT());
 		
-			// final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
+			final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
 		}
 
 
@@ -645,12 +645,12 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 	MatchPointCloud::Ptr point_normals(boost::make_shared<MatchPointCloud>());
 
 
-	if (clean_matches.empty()) {
+	if (true /*clean_matches.empty()*/) {
 		std::vector<int> indices(N);
 		std::iota(indices.begin(), indices.end(), 0);
 		
 		std::for_each(
-			std::execution::par_unseqcd ,
+			std::execution::par_unseq,
 			indices.begin(),
 			indices.end(),
 			[&](int i) {
@@ -737,43 +737,68 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 }
 
 Eigen::Matrix<double, 24, 1> Localizer::get_f(state_ikfom &s,
-											  const input_ikfom &in) {
+											                        const input_ikfom &in,
+																							const double& dt) {
 
   Eigen::Matrix<double, 24, 1> res = Eigen::Matrix<double, 24, 1>::Zero();
   vect3 omega;
   in.gyro.boxminus(omega, s.bg);
   vect3 a_inertial = s.rot * (in.acc-s.ba);
   for(int i = 0; i < 3; i++ ){
-	res(i) = s.vel[i];
-	res(i + 3) =  omega[i]; 
-	res(i + 12) = a_inertial[i] + s.grav[i]; 
+		res(i) = s.vel[i] + 0.5 * (a_inertial[i] + s.grav[i]) * dt;
+		res(i + 3) =  omega[i]; 
+		res(i + 12) = a_inertial[i] + s.grav[i]; 
   }
+
   return res;
 }
 
-Eigen::Matrix<double, 24, 23> Localizer::df_dx(state_ikfom &s, const input_ikfom &in) {
+Eigen::Matrix<double, 24, 23> Localizer::df_dx(state_ikfom &s,
+											                        const input_ikfom &in,
+																							const double& dt) {
 
   Eigen::Matrix<double, 24, 23> cov = Eigen::Matrix<double, 24, 23>::Zero();
-  cov.template block<3, 3>(0, 12) = Eigen::Matrix3d::Identity();
-  vect3 acc_;
-  in.acc.boxminus(acc_, s.ba);
-  cov.template block<3, 3>(12, 3) = -s.rot.toRotationMatrix()*MTK::hat(acc_);
-  cov.template block<3, 3>(12, 18) = -s.rot.toRotationMatrix();
-  Eigen::Matrix<state_ikfom::scalar, 2, 1> vec = Eigen::Matrix<state_ikfom::scalar, 2, 1>::Zero();
+  
+	// Correct measured acceleration and angular velocity
+	vect3 acc, omega;
+	in.acc.boxminus(acc, s.ba);
+	in.gyro.boxminus(omega, s.bg);
+
+	// Compute grav matrix for S2 (from equation 29 in IKFoM, i.e. U^F_{26})
   Eigen::Matrix<state_ikfom::scalar, 3, 2> grav_matrix;
-  s.S2_Mx(grav_matrix, vec, 21);
-  cov.template block<3, 2>(12, 21) =  grav_matrix;
+  Eigen::Matrix<state_ikfom::scalar, 2, 1> vec = Eigen::Matrix<state_ikfom::scalar, 2, 1>::Zero();
+  s.S2_Mx(grav_matrix, vec, 21); // NOTE: is grav_matrix always zero?
+
+	// Position: derivative with respect to x (see use-ikfom.hpp)
+	cov.template block<3, 3>(0, 3)  = -s.rot.toRotationMatrix()*MTK::hat(acc) * dt * 0.5;
+	cov.template block<3, 3>(0, 12) = Eigen::Matrix3d::Identity();
+	cov.template block<3, 3>(0, 18) = -s.rot.toRotationMatrix();
+	cov.template block<3, 2>(0, 21) = grav_matrix;
+
+	// Rotation
   cov.template block<3, 3>(3, 15) = -Eigen::Matrix3d::Identity();
+
+	// Velocity
+	cov.template block<3, 3>(12, 3)  = -s.rot.toRotationMatrix()*MTK::hat(acc);
+	cov.template block<3, 3>(12, 18) = -s.rot.toRotationMatrix();
+  cov.template block<3, 2>(12, 21) =  grav_matrix;
+  
   return cov;
 }
 
-Eigen::Matrix<double, 24, 12> Localizer::df_dw(state_ikfom &s, const input_ikfom &in) {
+Eigen::Matrix<double, 24, 12> Localizer::df_dw(state_ikfom &s,
+											                        const input_ikfom &in,
+																							const double& dt) {
 
   Eigen::Matrix<double, 24, 12> cov = Eigen::Matrix<double, 24, 12>::Zero();
+
+	// Derivative with respect to noise
+  cov.template block<3, 3>(3, 0)  = -Eigen::Matrix3d::Identity();
+  cov.template block<3, 3>(0, 3)  = -s.rot.toRotationMatrix() * dt * 0.5;
   cov.template block<3, 3>(12, 3) = -s.rot.toRotationMatrix();
-  cov.template block<3, 3>(3, 0) = -Eigen::Matrix3d::Identity();
-  cov.template block<3, 3>(15, 6) = Eigen::Matrix3d::Identity();
-  cov.template block<3, 3>(18, 9) = Eigen::Matrix3d::Identity();
+  cov.template block<3, 3>(15, 6) =  Eigen::Matrix3d::Identity();
+  cov.template block<3, 3>(18, 9) =  Eigen::Matrix3d::Identity();
+
   return cov;
 }
 

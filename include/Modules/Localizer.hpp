@@ -232,23 +232,26 @@ namespace fast_limo {
 			void h_share_model(state_ikfom &updated_state,
 												 esekfom::dyn_share_datastruct<double> &ekfom_data);
 
-			Eigen::Matrix<double, 24, 1> get_f(state_ikfom &s, const input_ikfom &in);
-			Eigen::Matrix<double, 24, 23> df_dx(state_ikfom &s, const input_ikfom &in);
-			Eigen::Matrix<double, 24, 12> df_dw(state_ikfom &s, const input_ikfom &in);
+			Eigen::Matrix<double, 24, 1> get_f(state_ikfom &s, const input_ikfom &in, const double& dt);
+			Eigen::Matrix<double, 24, 23> df_dx(state_ikfom &s, const input_ikfom &in, const double& dt);
+			Eigen::Matrix<double, 24, 12> df_dw(state_ikfom &s, const input_ikfom &in, const double& dt);
 
 			static Eigen::Matrix<double, 24, 1> get_f_wrapper(state_ikfom& s,
-																												const input_ikfom& in) {
-					return Localizer::getInstance().get_f(s, in);
+																												const input_ikfom& in,
+																												const double& dt) {
+					return Localizer::getInstance().get_f(s, in, dt);
 			}
 
 			static Eigen::Matrix<double, 24, 23> df_dx_wrapper(state_ikfom& s,
-																												const input_ikfom& in) {
-					return Localizer::getInstance().df_dx(s, in);
+																												const input_ikfom& in,
+																												const double& dt) {
+					return Localizer::getInstance().df_dx(s, in, dt);
 			}
 
 			static Eigen::Matrix<double, 24, 12> df_dw_wrapper(state_ikfom& s,
-																												const input_ikfom& in) {
-					return Localizer::getInstance().df_dw(s, in);
+																												const input_ikfom& in,
+																												const double& dt) {
+					return Localizer::getInstance().df_dw(s, in, dt);
 			}
 
 			static void h_share_model_wrapper(state_ikfom& updated_state,
