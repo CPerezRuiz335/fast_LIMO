@@ -650,7 +650,7 @@ void Localizer::h_share_model(state_ikfom &updated_state,
 		std::iota(indices.begin(), indices.end(), 0);
 		
 		std::for_each(
-			std::execution::par_unseqcd ,
+			std::execution::par_unseq,
 			indices.begin(),
 			indices.end(),
 			[&](int i) {

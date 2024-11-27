@@ -58,7 +58,7 @@ filters:
 
   voxelGrid:
     active: true
-    leafSize: [ 1., 1., 0.5 ]
+    leafSize: [ 1., 1., .5 ]
 
   minDistance: # sphere crop
     active: true
