@@ -629,11 +629,14 @@ bool Localizer::propagatedFromTimeRange(double start_time, double end_time,
 void Localizer::h_share_model(state_ikfom &updated_state,
 							  esekfom::dyn_share_datastruct<double> &ekfom_data) {
 	
-	static int i(0);
 	Config& config = Config::getInstance();
 
-	if (i++ == 0)
+	static int i(0);
+	if (i++ == 0) {
+		ekfom_data.h_x = Eigen::MatrixXd::Zero(0, 12);
+		ekfom_data.h.resize(0);	
 		return;
+	}
 
 	int N = pc2match_->size();
 
