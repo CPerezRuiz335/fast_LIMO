@@ -11,26 +11,11 @@ ros::Publisher orig_pub, desk_pub, match_pub, finalraw_pub, body_pub, normals_pu
 std::string world_frame, body_frame;
 
 void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
-    static bool first(true);
-    static double first_time;
-
-    if (first) {
-        first_time = msg->header.stamp.toSec();
-        first = false;
-    }
-
-    double stamp = fast_limo::Config::getInstance().start_rosbag 
-                 + (msg->header.stamp.toSec() - first_time); 
-
     PointCloudT::Ptr pc_ (boost::make_shared<PointCloudT>());
     pcl::fromROSMsg(*msg, *pc_);
 
     fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
-    if (fast_limo::Config::getInstance().start_rosbag < 0)
-        loc.updatePointCloud(pc_, msg->header.stamp.toSec());
-    else
-        loc.updatePointCloud(pc_, stamp);
-
+    loc.updatePointCloud(pc_, msg->header.stamp.toSec());
 
     // Publish output pointcloud
     sensor_msgs::PointCloud2 pc_ros;

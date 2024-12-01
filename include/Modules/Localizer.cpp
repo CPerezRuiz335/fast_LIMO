@@ -534,7 +534,9 @@ PointCloudT::Ptr Localizer::deskewPointCloud(PointCloudT::Ptr& pc, double& start
 			indices.begin(),
 			indices.end(),
 			[&](int k) {
-				int i_f = algorithms::binary_search_tailored(frames, extract_point_time(deskewed_scan_->points[k]) + offset);
+				int i_f = algorithms::binary_search_tailored(
+											frames,
+											extract_point_time(deskewed_scan_->points[k]) + offset);
 
 				State X0 = frames[i_f];
 				X0.update(extract_point_time(deskewed_scan_->points[k]) + offset);

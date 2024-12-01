@@ -25,7 +25,7 @@ calibration:  # automatic IMU calibration (if all set to false, no calibration w
   gravity_align: true     # estimate gravity vector
   accel: true             # estimate lin. accel. bias
   gyro: true              # estimate ang. vel. bias
-  time: .5               # time to estimate (during this time, the robot must be at stand still)
+  time: 3.               # time to estimate (during this time, the robot must be at stand still)
 
 extrinsics: # w.r.t baselink [SI]
   imu:
@@ -58,7 +58,7 @@ filters:
 
   voxelGrid:
     active: true
-    leafSize: [ 1., 1., 0.5 ]
+    leafSize: [ 1., 1., 1. ]
 
   minDistance: # sphere crop
     active: true
