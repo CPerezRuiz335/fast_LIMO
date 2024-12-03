@@ -104,12 +104,8 @@ class Manager {
         return;
       }
 
-      PointCloudT::Ptr preprocessed(boost::make_shared<PointCloudT>());
-      PointCloudT::Ptr deskewed(boost::make_shared<PointCloudT>());
-      PointCloudT::Ptr downsampled(boost::make_shared<PointCloudT>());
-      PointCloudT::Ptr global(boost::make_shared<PointCloudT>());
 
-
+      PointCloudT::Ptr preprocessed(boost::make_shared<PointCloudT>()); 
       {
 #ifdef DEBUG
   SWRI_PROFILE("preprocess");
@@ -117,23 +113,35 @@ class Manager {
         preprocessed = limoncello::preprocess(raw);
       }
 
+      PointCloudT::Ptr deskewed(boost::make_shared<PointCloudT>());
       {
 #ifdef DEBUG
   SWRI_PROFILE("deskew");
 #endif   
         double offset = 0.0;
-        if (config.time_offset) {
-          // automatic sync (not precise!)
-          offset = state_.stamp - deskewed->points.back().stamp - 1.e-4; 
+        if (config.time_offset) { // automatic sync (not precise!)
+          offset = state_.stamp - preprocessed->points.back().stamp - 1.e-4; 
           if (offset > 0.0) offset = 0.0; // don't jump into future
         }
 
-        double scan_stamp = deskewed->points.back().stamp + offset;
+        double end_stamp = preprocessed->points.back().stamp + offset;
+        if (state_buffer_.empty() || state_buffer_.front().stamp < end_stamp) {
+          ROS_INFO_STREAM(
+            "PROPAGATE WAITING... \n"
+            "     - buffer time: " << state_buffer_.front().stamp << "\n"
+            "     - end scan time: " << scan_stamp);
 
-        States interpolated = limoncello::interpolate();
-        deskewed = limoncello::deskew(preprocessed, state_, state_buffer_);
+          std::unique_lock<decltype(mtx_buffer_)> lock(mtx_buffer_);
+          cv_prop_stamp_.wait(lock, [this, &end_stamp] { 
+              return state_buffer_.front().stamp >= end_stamp;
+          });
+
+        } 
+
+        deskewed = limoncello::deskew(preprocessed, state_, state_buffer_, offset);
       }
 
+      PointCloudT::Ptr downsampled(boost::make_shared<PointCloudT>());
       {
 #ifdef DEBUG
   SWRI_PROFILE("downsample");
@@ -155,6 +163,7 @@ class Manager {
         mtx_state_.unlock();
       }
 
+      PointCloudT::Ptr global(boost::make_shared<PointCloudT>());
       pcl::transformPointCloud(*deskewed, *global,
 		                           state_.get_RT() * state_.get_extr_RT());
 
