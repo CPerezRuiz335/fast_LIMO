@@ -4,12 +4,11 @@
 
 namespace fast_limo {
 
-  struct IMUmeas{
+  struct Imu {
     double stamp;
-    double dt; // defined as the difference between the current and the previous measurement
-    Eigen::Vector3f ang_vel;
-    Eigen::Vector3f lin_accel;
-    Eigen::Quaternionf q;
+    Eigen::Vector3d ang_vel;
+    Eigen::Vector3d lin_accel;
+    Eigen::Quaterniond q;
   };
 
 

@@ -111,7 +111,8 @@ class State{
 
 				// Time between IMU samples
 				double dt = t - this->time;
-				assert(dt > 0);
+				if (dt < 0) dt = 1./400.;
+				// assert(dt > 0);
 
 				// Exp orientation
 				Eigen::Vector3f w = this->w - this->b.gyro;

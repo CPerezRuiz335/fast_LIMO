@@ -508,6 +508,11 @@ PointCloudT::Ptr Localizer::deskewPointCloud(PointCloudT::Ptr& pc, double& start
 		if (offset > 0.0) offset = 0.0; // don't jump into future
 	}
 
+	// std::cout << "imu stamp_: " << imu_stamp_ << std::endl;
+	// std::cout << "last point timestamp: " << extract_point_time(deskewed_scan_->points.back()) << std::endl;
+	// std::cout << "first point timestamp: " << extract_point_time(deskewed_scan_->points.front()) << std::endl;
+
+
 	// Set scan_stamp for next iteration
 	scan_stamp_ = extract_point_time(deskewed_scan_->points.back()) + offset;
 

@@ -27,7 +27,7 @@ void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
 
     fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
     if (fast_limo::Config::getInstance().start_rosbag < 0)
-        loc.updatePointCloud(pc_, msg->header.stamp.toSec());
+        loc.updatePointCloud(pc_, msg->header.stamp.toSec() + 37.); //constant for UTC to TAI
     else
         loc.updatePointCloud(pc_, stamp);
 
@@ -74,6 +74,7 @@ void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
 
 void imu_callback(const sensor_msgs::Imu::ConstPtr& msg){
 
+
     fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
 
     fast_limo::IMUmeas imu;
@@ -106,6 +107,7 @@ void mySIGhandler(int sig){
 }
 
 int main(int argc, char** argv) {
+	std::cout << std::setprecision(18);
 
     ros::init(argc, argv, "fast_limo");
     ros::NodeHandle nh("~");
