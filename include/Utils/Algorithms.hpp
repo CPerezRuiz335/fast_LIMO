@@ -121,7 +121,7 @@ namespace fast_limo {
 			// RANSAC model and parameters
 			typename pcl::SampleConsensusModelPlane<PointT>::Ptr model(new pcl::SampleConsensusModelPlane<PointT>(input_cloud));
 			typename pcl::RandomSampleConsensus<PointT> ransac(model);
-			ransac.setDistanceThreshold(0.15); // Adjust threshold based on your data
+			ransac.setDistanceThreshold(0.2); // Adjust threshold based on your data
 			ransac.setMaxIterations(100);
 
 			// Perform RANSAC to identify inliers

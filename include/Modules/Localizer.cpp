@@ -237,21 +237,21 @@ IMUmeas Localizer::imu2baselink(IMUmeas& imu) {
 
 	IMUmeas imu_baselink;
 
-	double dt = imu.stamp - this->prev_imu_stamp;
+	double dt = imu.stamp - prev_imu_stamp_;
 	
 	if ( (dt == 0.) || (dt > 0.1) ) { dt = 1.0/400.0; }
 
 	// Transform angular velocity (will be the same on a rigid body, so just rotate to baselink frame)
-	Eigen::Vector3f ang_vel_cg = config.extrinsics.imu2baselink.R * imu.ang_vel;
+	Eigen::Vector3f ang_vel_cg = config.extrinsics.imu2baselink_T.rotation() * imu.ang_vel;
 
-	static Eigen::Vector3f ang_vel_cg_prev = ang_vel_cg;
+	static Eigen::Vector3f ang_vel_cg_prev(0.f, 0.f, 0.f);
 
 	// Transform linear acceleration (need to account for component due to translational difference)
-	Eigen::Vector3f lin_accel_cg = this->extr.imu2baselink.R * imu.lin_accel;
+	Eigen::Vector3f lin_accel_cg = config.extrinsics.imu2baselink_T.rotation() * imu.lin_accel;
 
 	lin_accel_cg = lin_accel_cg
-									+ ((ang_vel_cg - ang_vel_cg_prev) / dt).cross(-this->extr.imu2baselink.t)
-									+ ang_vel_cg.cross(ang_vel_cg.cross(-this->extr.imu2baselink.t));
+						+ ((ang_vel_cg - ang_vel_cg_prev) / dt).cross(-config.extrinsics.imu2baselink_T.translation())
+						+ ang_vel_cg.cross(ang_vel_cg.cross(-config.extrinsics.imu2baselink_T.translation()));
 
 	ang_vel_cg_prev = ang_vel_cg;
 
@@ -260,11 +260,11 @@ IMUmeas Localizer::imu2baselink(IMUmeas& imu) {
 	imu_baselink.dt        = dt;
 	imu_baselink.stamp     = imu.stamp;
 
-	Eigen::Quaternionf q(this->extr.imu2baselink.R);
+	Eigen::Quaternionf q(config.extrinsics.imu2baselink_T.rotation());
 	q.normalize();
 	imu_baselink.q = q * imu.q;
 
-	this->prev_imu_stamp = imu.stamp;
+	prev_imu_stamp_ = imu.stamp;
 
 	return imu_baselink;
 }
