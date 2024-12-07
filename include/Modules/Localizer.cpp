@@ -58,9 +58,12 @@ void Localizer::init() {
 	propagated_buffer_.set_capacity(2000);
 
 	// PCL filters setup
+	std::cout << config.filters.cropBoxMin << std::endl;
+	std::cout << config.filters.cropBoxMax << std::endl;
+
   crop_filter_.setNegative(true);
-	crop_filter_.setMin(config.filters.cropBoxMin); 
-	crop_filter_.setMax(config.filters.cropBoxMax);
+	crop_filter_.setMin(Vector4f(-1.7, -.5, -3.0, 1.)); 
+	crop_filter_.setMax(Vector4f(2.0, .5, 3.0, 1.));
 
 	voxel_filter_.setLeafSize(config.filters.leafSize);
 		
@@ -113,14 +116,18 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 	raw_pc->is_dense = false;
 	pcl::removeNaNFromPointCloud(*raw_pc, *raw_pc, idx);
 
+	// Motion compensation
+	PointCloudT::Ptr deskewed(boost::make_shared<PointCloudT>());
+	deskewed = deskewPointCloud(raw_pc, time_stamp);
+
 	// Distance & Time Rate filters
-	PointCloudT::Ptr input_pc(boost::make_shared<PointCloudT>());
+	PointCloudT::Ptr processed(boost::make_shared<PointCloudT>());
 
 	int index = 0;
 	std::copy_if(
-		raw_pc->points.begin(), 
-		raw_pc->points.end(), 
-		std::back_inserter(input_pc->points), 
+		deskewed->points.begin(), 
+		deskewed->points.end(), 
+		std::back_inserter(processed->points), 
 		[&](const PointType& p) mutable {
 				// Initialize pass flag
 				bool pass = true;
@@ -150,18 +157,14 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 	);
 
 	if (config.debug)
-		original_scan_ = input_pc;
-
-	// Motion compensation
-	PointCloudT::Ptr deskewed_Xt2_pc(boost::make_shared<PointCloudT>());
-	deskewed_Xt2_pc = deskewPointCloud(input_pc, time_stamp);
+		original_scan_ = processed;
 
 	// Voxel Grid Filter
 	if (config.filters.voxel_active) { 
-		voxel_filter_.setInputCloud(deskewed_Xt2_pc);
+		voxel_filter_.setInputCloud(processed);
 		voxel_filter_.filter(*pc2match_);
 	} else {
-		pc2match_ = deskewed_Xt2_pc;
+		pc2match_ = processed;
 	}
 
 	if (pc2match_->points.size() > 1) {
@@ -182,9 +185,20 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 		                         state_.get_RT() * state_.get_extr_RT());
 
 		if (config.debug) {
-			pcl::transformPointCloud(*deskewed_Xt2_pc, *final_raw_scan_,
+			crop_filter_.setMin(Vector4f(-1.7, -.7, -3.0, 1.)); 
+			crop_filter_.setMax(Vector4f(2.0, .7, 3.0, 1.));
+			crop_filter_.setInputCloud(deskewed);
+			crop_filter_.filter(*final_raw_scan_);
+
+			crop_filter_.setMin(Vector4f(-1.7, -.5, -3.0, 1.)); 
+			crop_filter_.setMax(Vector4f(9.0, .5, 0.0, 1.));
+			crop_filter_.setInputCloud(final_raw_scan_);
+			crop_filter_.filter(*final_raw_scan_);
+
+			pcl::transformPointCloud(*final_raw_scan_, *final_raw_scan_,
 			                         state_.get_RT() * state_.get_extr_RT());
-		
+
+
 			// final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
 		}
 
@@ -218,14 +232,53 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 	prev_scan_stamp_ = scan_stamp_;
 }
 
+IMUmeas Localizer::imu2baselink(IMUmeas& imu) {
+	Config& config = Config::getInstance();
+
+	IMUmeas imu_baselink;
+
+	double dt = imu.stamp - this->prev_imu_stamp;
+	
+	if ( (dt == 0.) || (dt > 0.1) ) { dt = 1.0/400.0; }
+
+	// Transform angular velocity (will be the same on a rigid body, so just rotate to baselink frame)
+	Eigen::Vector3f ang_vel_cg = config.extrinsics.imu2baselink.R * imu.ang_vel;
+
+	static Eigen::Vector3f ang_vel_cg_prev = ang_vel_cg;
+
+	// Transform linear acceleration (need to account for component due to translational difference)
+	Eigen::Vector3f lin_accel_cg = this->extr.imu2baselink.R * imu.lin_accel;
+
+	lin_accel_cg = lin_accel_cg
+									+ ((ang_vel_cg - ang_vel_cg_prev) / dt).cross(-this->extr.imu2baselink.t)
+									+ ang_vel_cg.cross(ang_vel_cg.cross(-this->extr.imu2baselink.t));
+
+	ang_vel_cg_prev = ang_vel_cg;
+
+	imu_baselink.ang_vel   = ang_vel_cg;
+	imu_baselink.lin_accel = lin_accel_cg;
+	imu_baselink.dt        = dt;
+	imu_baselink.stamp     = imu.stamp;
+
+	Eigen::Quaternionf q(this->extr.imu2baselink.R);
+	q.normalize();
+	imu_baselink.q = q * imu.q;
+
+	this->prev_imu_stamp = imu.stamp;
+
+	return imu_baselink;
+}
+
 void Localizer::updateIMU(IMUmeas& imu) {
 
 	Config& config = Config::getInstance();
 
+	imu = imu2baselink(imu);
+
 	imu_stamp_ = imu.stamp;
-	imu.dt = imu.stamp - prev_imu_stamp_;
+	// imu.dt = imu.stamp - prev_imu_stamp_;
 	
-	if ( (imu.dt == 0.) || (imu.dt > 0.1) ) { imu.dt = 1.0/400.0; }
+	// if ( (imu.dt == 0.) || (imu.dt > 0.1) ) { imu.dt = 1.0/400.0; }
 
 
 	if (first_imu_stamp_ == 0.0)

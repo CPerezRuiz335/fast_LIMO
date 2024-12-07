@@ -15,7 +15,7 @@ void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
     pcl::fromROSMsg(*msg, *pc_);
 
     fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
-    loc.updatePointCloud(pc_, msg->header.stamp.toSec());
+    loc.updatePointCloud(pc_, msg->header.stamp.toSec() + 37.);
 
     // Publish output pointcloud
     sensor_msgs::PointCloud2 pc_ros;

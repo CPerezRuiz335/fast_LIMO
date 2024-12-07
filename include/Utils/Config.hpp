@@ -194,16 +194,16 @@ namespace fast_limo {
       // FILTERS
       nh.getParam("filters/cropBox/active", filters.crop_active);
       nh.getParam("filters/cropBox/box/min", tmp);
-      if (tmp.size() >= 4)
-        filters.cropBoxMin = Vector4f(tmp[0], tmp[1], tmp[2], tmp[3]);
+      // if (tmp.size() == 3)
+        filters.cropBoxMin = Vector4f(tmp[0], tmp[1], tmp[2], 1.);
 
       nh.getParam("filters/cropBox/box/max", tmp);
-      if (tmp.size() >= 4)
-        filters.cropBoxMax = Vector4f(tmp[0], tmp[1], tmp[2], tmp[3]);
+      if (tmp.size() == 3)
+        filters.cropBoxMax = Vector4f(tmp[0], tmp[1], tmp[2], 1.);
 
       nh.getParam("filters/voxelGrid/active", filters.voxel_active);
       nh.getParam("filters/voxelGrid/leafSize", tmp);
-      if (tmp.size() >= 3)
+      if (tmp.size() == 3)
         filters.leafSize = Vector4f(tmp[0], tmp[1], tmp[2], 1.);
 
       nh.getParam("filters/minDistance/active", filters.dist_active);

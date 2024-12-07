@@ -188,6 +188,7 @@ namespace fast_limo {
 			void init();
 
 			// Callbacks 
+			void imu2baselink(IMUmeas& imu);
 			void updateIMU(IMUmeas& raw_imu);
 			void updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp);
 
