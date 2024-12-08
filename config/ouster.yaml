@@ -71,11 +71,11 @@ filters:
     value: 5.5  # [m]
 
   FoV: # crop field of view
-    active: false
+    active: true
     value: 180  # [deg]
   
   rateSampling: # quick downsample
-    active: false
+    active: true
     value: 2
 
 iKFoM:  # Iterative Kalman Filter on Manifolds lib
