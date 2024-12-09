@@ -199,7 +199,7 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 			                         state_.get_RT() * state_.get_extr_RT());
 
 
-			// final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
+			final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
 		}
 
 
@@ -347,6 +347,7 @@ void Localizer::updateIMU(IMUmeas& imu) {
 
 				// set gravity aligned orientation
 				state_.q = grav_q;
+				state_.g = grav_vec;
 
 			}
 
@@ -471,7 +472,7 @@ void Localizer::init_iKFoM_state() {
 	state_ikfom init_state = iKFoM_.get_x();
 	init_state.rot = state_.q.cast<double>();
 	init_state.pos = state_.p.cast<double>();
-	init_state.grav = S2(Eigen::Vector3d(0., 0., -gravity_));
+	init_state.grav = S2(-state_.g.cast<double>());
 	init_state.bg = state_.b.gyro.cast<double>();
 	init_state.ba = state_.b.accel.cast<double>();
 
