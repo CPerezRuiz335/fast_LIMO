@@ -73,8 +73,19 @@ set(SOURCE_FILES
   include/Modules/Localizer.cpp
 )
 
+include(FetchContent)
+
+FetchContent_Declare(
+  yaml-cpp
+  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+  GIT_TAG 0.6.0
+)
+
+FetchContent_MakeAvailable(yaml-cpp)
+
 # Link libraries
 set(LINK_LIBRARIES
+  PUBLIC yaml-cpp::yaml-cpp
   IKFOM
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}

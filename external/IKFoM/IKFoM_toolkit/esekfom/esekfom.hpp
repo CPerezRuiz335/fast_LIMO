@@ -133,16 +133,7 @@ public:
 	typedef Eigen::Matrix<scalar_type, measurement_noise_dof, measurement_noise_dof> measurementnoisecovariance;
 	typedef Eigen::Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic> measurementnoisecovariance_dyn;
 
-	esekf(const state &x = state(),
-		const cov  &P = cov::Identity()): x_(x), P_(P){
-	#ifdef USE_sparse
-		SparseMatrix<scalar_type> ref(n, n);
-		ref.setIdentity();
-		l_ = ref;
-		f_x_2 = ref;
-		f_x_1 = ref;
-	#endif
-	};
+	esekf(const state &x = state(), const cov  &P = cov::Identity()): x_(x), P_(P) { };
 
 	//receive system-specific models and their differentions
 	//for measurement as an Eigen matrix whose dimension is changing.
@@ -173,7 +164,32 @@ public:
 		x_.build_vect_state();
 	}
 
+	//receive system-specific models and their differentions
+	//for measurement as a dynamic manifold whose dimension  or type is changing.
+	//calculate  measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) 
+	//and the noise covariance (R) at the same time, by only one function (h_dyn_share_in).
+	//for any scenarios where it is needed
+	template <typename Iterator>
+	void init_dyn_runtime_share(processModel f_in,
+															processMatrix1 f_x_in,
+															processMatrix2 f_w_in,
+															int maximum_iteration,
+															Iterator limit_vector)
+	{
+		f = f_in;
+		f_x = f_x_in;
+		f_w = f_w_in;
 
+		maximum_iter = maximum_iteration;
+		for(int i=0; i<n; i++)
+		{
+			limit[i] = limit_vector[i];
+		}
+
+		x_.build_S2_state();
+		x_.build_SO3_state();
+		x_.build_vect_state();
+	}
 
 	// iterated error state EKF propogation
 	void predict(double &dt, processnoisecovariance &Q, const input &i_in){
@@ -265,7 +281,9 @@ public:
 	
 	// Modified version used in Fast-LIO2
 	//iterated error state EKF update modified for one specific system.
-	void update_iterated_dyn_share_modified(double R) {
+	template<typename measurementModel_dyn_runtime_share>
+	void update_iterated_dyn_runtime_share(double R, 
+																			   measurementModel_dyn_runtime_share h) {
 
 		dyn_share_datastruct<scalar_type> dyn_share;
 		dyn_share.valid = true;
@@ -290,11 +308,7 @@ public:
 				continue;
 			}
 
-			#ifdef USE_sparse
-				spMt h_x_ = dyn_share.h_x.sparseView();
-			#else
-				Eigen::Matrix<scalar_type, Eigen::Dynamic, 12> h_x_ = dyn_share.h_x;
-			#endif
+			Eigen::Matrix<scalar_type, Eigen::Dynamic, 12> h_x_ = dyn_share.h_x;
 			dof_Measurement = h_x_.rows();
 			vectorized_state dx;
 			x_.boxminus(dx, x_propagated);
@@ -467,9 +481,11 @@ public:
 	const state& get_x() const {
 		return x_;
 	}
+
 	const cov& get_P() const {
 		return P_;
 	}
+
 private:
 	state x_;
 	measurement m_;
