@@ -7,6 +7,7 @@
 #include "Config.hpp"
 #include "State.hpp"
 
+
 typedef MTK::vect<3, double> vect3;
 typedef MTK::SO3<double> SO3;
 typedef MTK::S2<double, 98090, 10000, 1> S2; 
@@ -30,7 +31,6 @@ MTK_BUILD_MANIFOLD(input_ikfom,
 );
 
 
-
 namespace limoncello {
 
 Eigen::Matrix<double, 24, 1> get_f(state_ikfom& s, const input_ikfom& in) {
@@ -38,9 +38,9 @@ Eigen::Matrix<double, 24, 1> get_f(state_ikfom& s, const input_ikfom& in) {
   vect3 omega = in.gyro - s.bg;
   vect3 a_inertial = s.rot * (in.acc - s.ba);
   
-  for (int i = 0; i < 3; i++ ){
+  for (int i = 0; i < 3; i++ ) {
     res(i)      = s.vel[i];
-    res(i + 3)  =  omega[i]; 
+    res(i + 3)  = omega[i]; 
     res(i + 12) = a_inertial[i] + s.grav[i]; 
   }
 
@@ -87,33 +87,47 @@ void init_IKFoM(esekfom::esekf<state_ikfom, 12, input_ikfom>& instance) {
 }
 
 
-void setIKFoM_state(esekfom::esekf<state_ikfom, 12, input_ikfom>& instance,
+void setIKFoM_state(esekfom::esekf<state_ikfom, 12, input_ikfom>& ikfom,
                     const State& state) {
   
   Config& cfg = Config::getInstance(); 
 
-  state_ikfom init_state = instance.get_x();
-  init_state.rot = state.q.cast<double> ();
-  init_state.pos = state.p.cast<double> ();
-  init_state.grav = S2(state.g);
-  init_state.bg = this->state.b.gyro.cast<double>();
-  init_state.ba = this->state.b.accel.cast<double>();
+  state_ikfom init_state = ikfom.get_x();
+  init_state.rot = state.q;
+  init_state.pos = state.p;
+  init_state.grav = S2(-state.g);
+  init_state.bg = state.b.gyro;
+  init_state.ba = state.b.accel;
 
-  // set up offsets (LiDAR -> BaseLink transform == LiDAR pose w.r.t. BaseLink)
-  init_state.offset_R_L_I = /*MTK::*/SO3(this->extr.lidar2baselink.R.cast<double>());
-  init_state.offset_T_L_I = this->extr.lidar2baselink.t.cast<double>();
-  this->_iKFoM.change_x(init_state); // set initial state
+  init_state.offset_R_L_I = SO3(cfg.extrinsics.lidar2imu_T.rotation().cast<double>());
+  init_state.offset_T_L_I = cfg.extrinsics.lidar2imu_T.translation().cast<double>()
+  ikfom.change_x(init_state); // set initial state
 
-  esekfom::esekf<state_ikfom, 12, input_ikfom>::cov init_P = this->_iKFoM.get_P();
+  esekfom::esekf<state_ikfom, 12, input_ikfom>::cov init_P = ikfom.get_P();
   init_P.setIdentity();
-  init_P(6,6) = init_P(7,7) = init_P(8,8) = 0.00001;
-  init_P(9,9) = init_P(10,10) = init_P(11,11) = 0.00001;
-  init_P(15,15) = init_P(16,16) = init_P(17,17) = 0.0001;
-  init_P(18,18) = init_P(19,19) = init_P(20,20) = 0.001;
-  init_P(21,21) = init_P(22,22) = 0.00001; 
+  init_P *= 1e-3f; 
   
-  this->_iKFoM.change_P(init_P);
+  ikfom.change_P(init_P);
+}
 
+
+void predict(esekfom::esekf<state_ikfom, 12, input_ikfom>& ikfom,
+             const Imu& imu,
+             const double& dt) {
+
+  Config& cfg = Config::getInstance();
+
+	input_ikfom in;
+	in.acc = imu.lin_accel;
+	in.gyro = imu.ang_vel;
+
+	Eigen::Matrix<double, 12, 12> Q = Eigen::Matrix<double, 12, 12>::Identity();
+	Q.block<3, 3>(0, 0) = config.ikfom.cov_gyro * Eigen::Matrix3d::Identity();
+	Q.block<3, 3>(3, 3) = config.ikfom.cov_acc * Eigen::Matrix3d::Identity();
+	Q.block<3, 3>(6, 6) = config.ikfom.cov_bias_gyro * Eigen::Matrix3d::Identity();
+	Q.block<3, 3>(9, 9) = config.ikfom.cov_bias_acc * Eigen::Matrix3d::Identity();
+
+  ikfom.predict(dt, Q, in);
 }
 
 } // namespace limoncello

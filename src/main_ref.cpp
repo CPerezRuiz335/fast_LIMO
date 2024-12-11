@@ -27,11 +27,9 @@ class Manager {
 
   States state_buffer_;
   
-  Imu prev_imu;
+  Imu prev_imu_;
   double first_imu_stamp_;
   double prev_scan_stamp_;
-
-  double gravity_;
 
   bool imu_calibrated_;
 
@@ -45,9 +43,9 @@ class Manager {
   esekfom::esekf<state_ikfom, 12, input_ikfom> IKFoM_;
   
 public:
-  Manager() : gravity_(9.80305), first_imu_stamp_(0.0), prev_scan_stamp_(0.0) {
-      init_IKFoM(IKFoM_);
-      imu_calibrated_ = not Config::getInstance().calibrate_imu; 
+  Manager() : first_imu_stamp_(0.0), prev_scan_stamp_(0.0) {
+    init_IKFoM(IKFoM_);
+    imu_calibrated_ = not Config::getInstance().calibrate_imu; 
   };
   
   ~Manager() = default;
@@ -65,14 +63,17 @@ SWRI_PROFILE("imu_callback");
     if (first_imu_stamp_ < 0.)
       first_imu_stamp_ = imu.stamp;
 
+    double dt = imu.stamp - prev_imu_.stamp;
+    dt = (dt < 0 or dt > 0.1) ? 1./cfg.imu.hz : dt;
+
     if (not imu_calibrated_) {
       static int N(0);
       static Eigen::Vector3d gyro_avg(0., 0., 0.);
       static Eigen::Vector3d accel_avg(0., 0., 0.);
-      static Eigen::Vector3d grav_vec(0., 0., gravity_);
+      static Eigen::Vector3d grav_vec(0., 0., cfg.gravity);
 
       if ((imu.stamp - first_imu_stamp_) < cfg.imu.calib_time) {
-        gyro_avg += imu.ang_vel;
+        gyro_avg  += imu.ang_vel;
         accel_avg += imu.lin_accel; 
         N++;
 
@@ -81,10 +82,10 @@ SWRI_PROFILE("imu_callback");
         accel_avg /= N;
 
         if (cfg.calibration.gravity_align) {
-          grav_vec = accel_avg.normalized() * abs(gravity_);
+          grav_vec = accel_avg.normalized() * abs(cfg.gravity);
           Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(
                                         grav_vec, 
-                                        Eigen::Vector3d(0., 0., gravity_));
+                                        Eigen::Vector3d(0., 0., cfg.gravity));
           state_.q = q;
           state_.g = grav_vec;
         }
@@ -99,11 +100,14 @@ SWRI_PROFILE("imu_callback");
       }
 
     } else {
-      correct_imu(imu, state_.b.gyro, state_.b.accel, cfg.imu.intrinsics.sm);
+      imu = imu2baselink(imu, dt);
+      imu = correct_imu(imu, state_.b.gyro, state_.b.accel, cfg.imu.intrinsics.sm);
 
       mtx_state_.lock();
-        predict(IKFoM_, imu);
+        predict(IKFoM_, imu, dt);
       mtx_state_.unlock();
+
+      prev_imu_ = imu;
 
       state_ = State(IKFoM_.get_x(), imu);
 
@@ -113,7 +117,7 @@ SWRI_PROFILE("imu_callback");
 
       cv_prop_stamp_.notify_one();
 
-      publish(state_, nh_, cfg.topics.out.state, cfg.topics.frame_id);
+      publish(state_, nh_, cfg.topics.out.state, cfg.topics.frame_id, IKFoM_.get_P());
     }
 
   }

@@ -1,42 +1,12 @@
 #pragma once
 
+#include <boost/circular_buffer.hpp>
+
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
-#include "IKFoM_toolkit/esekfom/esekfom.hpp"
-
-#include "PCL.hpp"
+#include "use-ikfom.hpp"
 #include "Config.hpp"
-
-
-typedef MTK::vect<3, double> vect3;
-typedef MTK::SO3<double> SO3;
-typedef MTK::S2<double, 98090, 10000, 1> S2; 
-typedef MTK::vect<1, double> vect1;
-typedef MTK::vect<2, double> vect2;
-
-MTK_BUILD_MANIFOLD(state_ikfom,
-  ((vect3, pos))
-  ((SO3, rot))
-  ((SO3, offset_R_L_I))
-  ((vect3, offset_T_L_I))
-  ((vect3, vel))
-  ((vect3, bg))
-  ((vect3, ba))
-  ((S2, grav))
-);
-
-MTK_BUILD_MANIFOLD(input_ikfom,
-  ((vect3, acc))
-  ((vect3, gyro))
-);
-
-MTK_BUILD_MANIFOLD(process_noise_ikfom,
-  ((vect3, ng))
-  ((vect3, na))
-  ((vect3, nbg))
-  ((vect3, nba))
-);
 
 
 namespace limoncello {
@@ -62,12 +32,14 @@ struct State {
   double stamp;
 
   State() : stamp(0.0) { 
+    Config& cfg = Config::getInstance();
+
     q.setIndentity();
     p.setZero();
     v.setZero();
     w.setZero();
     a.setZero();
-    g.setZero();
+    g = Eigen::Vector3d(0., 0., cfg.gravity);
 
     // Extrinsics 
     Config& cfg = Config::getInstance();
@@ -125,9 +97,9 @@ struct State {
     float w_norm = w_corrected.norm();
     Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
 
-    if (w_norm > 1.e-7){
+    if (w_norm > 1.e-7) {
       Eigen::Vector3f r = w_corrected / w_norm;
-      igen::Matrix3f K << 0.0, -r[2],  r[1],
+      Eigen::Matrix3f K << 0.0, -r[2],  r[1],
                          r[2],   0.0, -r[0],
                         -r[1],  r[0],   0.0;
 
@@ -150,5 +122,7 @@ struct State {
     v += a0*dt;
   }
 };
+
+typedef boost::circular_buffer<State> States;
 
 }

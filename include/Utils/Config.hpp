@@ -41,7 +41,7 @@ namespace fast_limo {
 
     struct Extrinsics {
       Affine3f imu2baselink_T;
-      Affine3f lidar2baselink_T;
+      Affine3f lidar2imu_T;
     } extrinsics;
 
     struct Intrinsics {
