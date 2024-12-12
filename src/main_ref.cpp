@@ -11,20 +11,20 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 
+#include "octree2/Octree.h"
+
 #include "State.hpp"
 #include "use-ikfom.hpp"
 #include "Imu.hpp"
 #include "ROSutils.hpp"
-
+#include "Config.hpp"
+#include "Cloud.hpp"
 
 
 using namespace limoncello;
 
 class Manager {
   State state_;
-
-  Publisher publisher_;
-
   States state_buffer_;
   
   Imu prev_imu_;
@@ -41,6 +41,7 @@ class Manager {
   ros::NodeHandle nh_;
 
   esekfom::esekf<state_ikfom, 12, input_ikfom> IKFoM_;
+  thuni::Octree ioctree_;
   
 public:
   Manager() : first_imu_stamp_(0.0), prev_scan_stamp_(0.0) {
@@ -102,12 +103,12 @@ SWRI_PROFILE("imu_callback");
     } else {
       imu = imu2baselink(imu, dt);
       imu = correct_imu(imu, state_.b.gyro, state_.b.accel, cfg.imu.intrinsics.sm);
+      
+      prev_imu_ = imu;
 
       mtx_state_.lock();
         predict(IKFoM_, imu, dt);
       mtx_state_.unlock();
-
-      prev_imu_ = imu;
 
       state_ = State(IKFoM_.get_x(), imu);
 
@@ -124,12 +125,14 @@ SWRI_PROFILE("imu_callback");
 
   void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
 
+    Config& cfg = Config::getInstance();
+
 #ifdef PROFILE
 SWRI_PROFILE("lidar_callback");
 #endif
 
     PointCloudT::Ptr raw(boost::make_shared<PointCloudT>());
-    pcl::fromROSMsg(*msg, *raw);
+    fromROSmsg2PointT(msg, raw);
 
     if (raw->points.empty()) {
       ROS_ERROR("[LIMONCELLO] Raw PointCloud is empty!");
@@ -158,19 +161,22 @@ SWRI_PROFILE("deskew");
 
     double end_stamp = raw->points.back().stamp + offset;
     if (state_buffer_.empty() || state_buffer_.front().stamp < end_stamp) {
-      ROS_INFO_STREAM(
+      ROS_INFO_STREAM (
         "PROPAGATE WAITING... \n"
         "     - buffer time: " << state_buffer_.front().stamp << "\n"
-        "     - end scan time: " << scan_stamp);
+        "     - end scan time: " << end_stamp);
 
       std::unique_lock<decltype(mtx_buffer_)> lock(mtx_buffer_);
       cv_prop_stamp_.wait(lock, [this, &end_stamp] { 
           return state_buffer_.front().stamp >= end_stamp;
       });
-
     } 
 
-    deskewed = deskew(raw, state_, state_buffer_, offset);
+    States interpolated = filter(state_buffer_,
+                                 prev_scan_stamp_,
+                                 raw->points.back().stamp + offset);
+
+    deskewed = deskew(raw, state_, interpolated, offset);
 }
 
     PointCloudT::Ptr processed(boost::make_shared<PointCloudT>()); 
@@ -195,19 +201,28 @@ SWRI_PROFILE("downsample");
       return;
     }
 
+    Eigen::Affine3f T;
 {
 #ifdef PROFILE
 SWRI_PROFILE("update");
 #endif 
     mtx_state_.lock();
-      update(IKFoM_, downsampled);
+      matches_ = update(IKFoM_, downsampled, ioctree_);
+      state_ = State(IKFoM_.get_x(), prev_imu_);
+      T = state_.affine3f() * state_.I2L;
     mtx_state_.unlock();
 }
 
     PointCloudT::Ptr global(boost::make_shared<PointCloudT>());
-    pcl::transformPointCloud(*deskewed, *global,
-                              state_.get_RT() * state_.get_extr_RT());
+    pcl::transformPointCloud(*deskewed, *global, T);
+    pcl::transformPointCloud(*downsampled, *downsampled, T);
 
+    std::vector<Vec3> udpate_cloud(downsampled->points.size());
+    for (const auto& p : downsampled->points) {
+      update_cloud.emplace_back(Vec3{p.x, p.y, p.z}); 
+    }
+
+    ioctree_.update(udpate_cloud);
 
     // Publish
     publish(global, nh_, cfg.topics.out.global_frame, cfg.topics.frame_id);

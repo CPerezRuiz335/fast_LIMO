@@ -7,12 +7,14 @@
 #include <tf2/convert.h>
 #include <tf2_ros/transform_broadcaster.h>
 
-// #include <geometry_msgs/QuaternionStamped.h>
-// #include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/QuaternionStamped.h>
+#include <geometry_msgs/PointStamped.h>
 // #include <geometry_msgs/PoseStamped.h>
 // #include <geometry_msgs/TransformStamped.h>
 
 #include <sensor_msgs/Imu.h>
+#include <sensor_msgs/PointCloud2.h>
+
 #include <nav_msgs/Odometry.h>
 
 #include "Imu.hpp"
@@ -41,14 +43,18 @@ Imu fromROS(const sensor_msgs::Imu::ConstPtr& in) {
 }
 
 void publish(const PointCloudT::Ptr& cloud, 
-             const ros::NodeHandle& nh,
+             ros::NodeHandle& nh,
              const std::string& topic,
              const std::string& frame_id) {
   
   sensor_msgs::PointCloud2 out;
   pcl::toROSMsg(*cloud, out);
-  oc_ros.header.stamp = ros::Time::now();
+  out.header.stamp = ros::Time::now();
+  out.header.frame_id = frame_id;
 
+  static ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud2>(topic, 1000);
+
+  pub.publish(out);
 }
 
 void publish(State& state, 

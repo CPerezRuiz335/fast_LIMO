@@ -34,7 +34,7 @@ struct State {
   State() : stamp(0.0) { 
     Config& cfg = Config::getInstance();
 
-    q.setIndentity();
+    q = Eigen::Quaterniond(0., 0., 0., 1.);
     p.setZero();
     v.setZero();
     w.setZero();
@@ -59,7 +59,7 @@ struct State {
   }
 
 
-  State(const state_ikfom& s, const Imu& imu) {
+  State(const state_ikfom& s, const Imu& imu = Imu()) {
     
     a = imu.a;
     w = imu.w;
@@ -79,7 +79,7 @@ struct State {
 
     // Offset LiDAR-IMU
     I2L.rotation() = s.offset_R_L_I.cast<float>();
-    I2L.translation() = s.offset_R_L_I.cast<float>();
+    I2L.translation() = s.offset_T_L_I.cast<float>();
   }
 
 
@@ -89,8 +89,7 @@ struct State {
     // p ⊞ (v*dt + 1/2*(R*(a - ba - na) + g)*dt*dt)
 
     double dt = t - stamp;
-    if (dt < 0)
-      dt = 1. / Config::getInstance().imu.hz;
+    assert(dt >= 0); // TODO
 
     // Exp orientation
     Eigen::Vector3f w_corrected = w - b.gyro;
@@ -121,6 +120,16 @@ struct State {
     // Velocity
     v += a0*dt;
   }
+
+  Eigen::Affine3f affine3f() const {
+    Affine3d transform = Affine3d::Identity();
+
+    transform.rotate(q);
+    transform.translate(p);
+
+    return transform.cast<float>();
+  }
+
 };
 
 typedef boost::circular_buffer<State> States;
