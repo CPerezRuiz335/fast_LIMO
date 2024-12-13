@@ -57,9 +57,6 @@ void Localizer::init() {
 	imu_buffer_.set_capacity(2000);
 	propagated_buffer_.set_capacity(2000);
 
-	// PCL filters setup
-	std::cout << config.filters.cropBoxMin << std::endl;
-	std::cout << config.filters.cropBoxMax << std::endl;
 
   crop_filter_.setNegative(true);
 	crop_filter_.setMin(Vector4f(-1.7, -.5, -3.0, 1.)); 
@@ -191,18 +188,21 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 			crop_filter_.filter(*final_raw_scan_);
 
 			crop_filter_.setMin(Vector4f(-1.7, -.5, -3.0, 1.)); 
-			crop_filter_.setMax(Vector4f(9.0, .5, 0.0, 1.));
+			crop_filter_.setMax(Vector4f(9.0, .5, -0.25, 1.));
 			crop_filter_.setInputCloud(final_raw_scan_);
 			crop_filter_.filter(*final_raw_scan_);
 
 			pcl::transformPointCloud(*final_raw_scan_, *final_raw_scan_,
 			                         state_.get_RT() * state_.get_extr_RT());
 
-
-			final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
+			if (config.ransac)
+				final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
 		}
 
-
+		// std::vector<pcl::PointXYZ> update_cloud(final_scan_->points.size());
+		// for (const auto& p : final_scan_->points) {
+			// update_cloud.emplace_back(pcl::PointXYZ(p.x, p.y, p.z));
+		// }
 		map.update(final_scan_->points, config.ioctree.downsample);
 
 	} else {
@@ -472,7 +472,7 @@ void Localizer::init_iKFoM_state() {
 	state_ikfom init_state = iKFoM_.get_x();
 	init_state.rot = state_.q.cast<double>();
 	init_state.pos = state_.p.cast<double>();
-	init_state.grav = S2(-state_.g.cast<double>());
+	init_state.grav = S2(Eigen::Vector3d(0., 0., -gravity_));
 	init_state.bg = state_.b.gyro.cast<double>();
 	init_state.ba = state_.b.accel.cast<double>();
 

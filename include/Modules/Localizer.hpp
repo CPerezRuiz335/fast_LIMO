@@ -103,6 +103,10 @@ namespace fast_limo {
 		}
 	};
 
+	struct alignas(16) Vec3 {
+		float x, y, z;
+	};
+
 	enum class SensorType {
 		OUSTER,
 		VELODYNE,

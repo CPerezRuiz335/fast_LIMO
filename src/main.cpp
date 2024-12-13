@@ -11,11 +11,13 @@ ros::Publisher orig_pub, desk_pub, match_pub, finalraw_pub, body_pub, normals_pu
 std::string world_frame, body_frame;
 
 void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
+    fast_limo::Config& cfg = fast_limo::Config::getInstance();
+
     PointCloudT::Ptr pc_ (boost::make_shared<PointCloudT>());
     pcl::fromROSMsg(*msg, *pc_);
 
     fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
-    loc.updatePointCloud(pc_, msg->header.stamp.toSec() + 37.);
+    loc.updatePointCloud(pc_, msg->header.stamp.toSec() + cfg.TAI_offset);
 
     // Publish output pointcloud
     sensor_msgs::PointCloud2 pc_ros;
@@ -79,7 +81,7 @@ void imu_callback(const sensor_msgs::Imu::ConstPtr& msg){
     body_msg.child_frame_id   = body_frame;
 
     state_pub.publish(state_msg);
-    body_pub.publish(body_msg);
+    // body_pub.publish(body_msg);
 
     // TF broadcasting
     tf_limo::broadcastTF(loc.getWorldState(), world_frame, body_frame, true);

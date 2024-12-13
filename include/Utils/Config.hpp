@@ -116,7 +116,8 @@ namespace fast_limo {
     bool debug;    // Debug flag
     bool verbose;  // Verbose flag
 
-    double start_rosbag;
+    double TAI_offset;
+    bool ransac;
 
     // Other
     int sensor_type;        // LiDAR type
@@ -166,11 +167,11 @@ namespace fast_limo {
         extrinsics.lidar2baselink_T.translation() = Vector3f(tmp[0], tmp[1], tmp[2]);
 
       nh.getParam("extrinsics/lidar/R", tmp);
-      if (tmp.size() >= 9) {
-        Matrix3f R_lidar;
-        R_lidar << tmp[0], tmp[1], tmp[2],
-                   tmp[3], tmp[4], tmp[5],
-                   tmp[6], tmp[7], tmp[8];
+      if (tmp.size() == 3) {
+        Matrix3f R_lidar = (Eigen::AngleAxisf(tmp[0] * M_PI/180., Eigen::Vector3f::UnitX()) *
+                           Eigen::AngleAxisf(tmp[1] * M_PI/180., Eigen::Vector3f::UnitY()) *
+                           Eigen::AngleAxisf(tmp[2] * M_PI/180., Eigen::Vector3f::UnitZ())
+                            ).toRotationMatrix();
 
         extrinsics.lidar2baselink_T.linear() = R_lidar;
       }
@@ -214,6 +215,8 @@ namespace fast_limo {
 
       double fov_deg;
       nh.getParam("filters/FoV/active", filters.fov_active);
+
+      std::cout << "ASDFASDF FOV ACTIVE: " << filters.fov_active << std::endl;
       nh.getParam("filters/FoV/value", fov_deg);
       filters.fov_angle = fov_deg * M_PI / 360.0; // Convert to radians, half FoV
 
@@ -241,7 +244,9 @@ namespace fast_limo {
       nh.getParam("iKFoM/LIMITS", ikfom_limits);
       ikfom.LIMITS = vector<double>(23, ikfom_limits);
 
-      nh.getParam("start_rosbag", start_rosbag);
+      nh.getParam("TAI_offset", TAI_offset);
+      nh.getParam("ransac", ransac);
+
 
       // iOctree
       nh.getParam("iOctree/order", ioctree.order);

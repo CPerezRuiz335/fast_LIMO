@@ -15,9 +15,10 @@ sensor_type: 1  # LiDAR type (0: OUSTER \ 1: VELODYNE \ 2: HESAI \ 3: LIVOX)
 
 debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visualizing purposes
 verbose: true   # print debug/performance board
-start_rosbag: -1
+TAI_offset: 0.  # offset between imu and lidar frame timestamp, this will be addes to lidar msg stamp
+ransac: false   # wether to apply ransac just for visualization
 
-estimate_extrinsics: false   # continuous estimation of LiDAR-IMU extrinsics 
+estimate_extrinsics: true   # continuous estimation of LiDAR-IMU extrinsics 
 time_offset: true           # whether to take into account a possible sync offset between IMU and LiDAR (set to true if they are not properly in sync)
 end_of_sweep: false          # whether the sweep reference time is w.r.t. the start or the end of the scan (only applies to VELODYNE/OUSTER)
 
@@ -25,19 +26,17 @@ calibration:  # automatic IMU calibration (if all set to false, no calibration w
   gravity_align: true     # estimate gravity vector
   accel: true             # estimate lin. accel. bias
   gyro: true              # estimate ang. vel. bias
-  time: 3.               # time to estimate (during this time, the robot must be at stand still)
+  time: 3.0               # time to estimate (during this time, the robot must be at stand still)
 
 extrinsics: # w.r.t baselink [SI]
   imu:
-    t: [ 0.0, 0.0, 0.0 ]
+    t: [ 0., 0., 0. ]
     R: [ 1.,  0.,  0.,
           0.,  1.,  0.,
           0.,  0.,  1. ]
   lidar:
     t: [1.10, 0.0, 0.05]
-    R: [0.998,  0.0,  -0.052,
-        0.0, 1.0,  0.0,
-        0.052, 0.0, 0.998]
+    R: [0., -2.9816897, 0.]
 
 
 intrinsics:
@@ -58,14 +57,14 @@ filters:
 
   voxelGrid:
     active: true
-    leafSize: [ 1., 1., 1. ]
+    leafSize: [ .5, .5, .5 ]
 
   minDistance: # sphere crop
     active: true
     value: 1.5  # [m]
 
   FoV: # crop field of view
-    active: false
+    active: true
     value: 180  # [deg]
   
   rateSampling: # quick downsample

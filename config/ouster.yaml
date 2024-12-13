@@ -15,7 +15,8 @@ sensor_type: 0  # LiDAR type (0: OUSTER \ 1: VELODYNE \ 2: HESAI \ 3: LIVOX)
 
 debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visualizing purposes
 verbose: true   # print debug/performance board
-start_rosbag: -1 # 1723029850.081984
+TAI_offset: 37  # offset between imu and lidar frame timestamp, this will be addes to lidar msg stamp
+ransac: false   # wether to apply ransac just for visualization
 
 estimate_extrinsics: true   # continuous estimation of LiDAR-IMU extrinsics 
 time_offset: true           # whether to take into account a possible sync offset between IMU and LiDAR (set to true if they are not properly in sync)
@@ -35,15 +36,9 @@ extrinsics: # w.r.t baselink [SI]
           0.,  0.,  1. ]
   lidar:
     t: [-0.30, 0.0, 0.98]
-    R: [  0.9966849,  0.0001349, -0.0813586,
-  -0.0006087,  0.9999830, -0.0057983,
-   0.0813565,  0.0058286,  0.9966680 ]
-    # R: [  0.9989171,  0.0001352, -0.0465253,
-    #       -0.0012179,  0.9997291, -0.0232436,
-    #       0.0465095,  0.0232751,  0.9986467 ]
-    # R: [  0.9999619,  0.0000762,  0.0087261,
-    #       0.0000762,  0.9998477, -0.0174522,
-    #      -0.0087261,  0.0174522,  0.9998096 ]
+    R: [0.333483, -3.8666532, -0.0038787] 
+    # t: [0.006253, -0.011775, 0.007645]
+    # R: [1.0000263, 0.4999751, -0.0043634]
 
 
 intrinsics:
@@ -57,7 +52,7 @@ intrinsics:
 
 filters:
   cropBox: # prism crop
-    active: true
+    active: false
     box:
       min: [ -1.5, -.5, -3.0 ]  # [m]
       max: [ 2.0, .5, 3.0 ]     # [m]
@@ -79,10 +74,10 @@ filters:
     value: 2
 
 iKFoM:  # Iterative Kalman Filter on Manifolds lib
-  MAX_NUM_ITERS: 10                # max num+1 of iterations of the KF (limits comp. load)
+  MAX_NUM_ITERS: 20                # max num+1 of iterations of the KF (limits comp. load)
   MAX_NUM_MATCHES: 5000           # max num of matches to account for when computing Jacobians (limits comp. load)
   MAX_NUM_PC2MATCH: 1.e+4         # max num of points to consider when matching with map (limits comp. load)
-  LIMITS: 0.001                     
+  LIMITS: 0.0001                     
 
   Mapping:
     NUM_MATCH_POINTS: 5           # num of points that constitute a match
