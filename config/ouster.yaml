@@ -14,8 +14,8 @@ num_threads: 4 # OpenMP threads (will be equal to $(nproc) if it is set higher)
 sensor_type: 0  # LiDAR type (0: OUSTER \ 1: VELODYNE \ 2: HESAI \ 3: LIVOX)
 
 debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visualizing purposes
-verbose: true   # print debug/performance board
-TAI_offset: 37  # offset between imu and lidar frame timestamp, this will be addes to lidar msg stamp
+verbose: false   # print debug/performance board
+TAI_offset: 37.  # offset between imu and lidar frame timestamp, this will be addes to lidar msg stamp
 ransac: false   # wether to apply ransac just for visualization
 
 estimate_extrinsics: true   # continuous estimation of LiDAR-IMU extrinsics 
@@ -23,22 +23,21 @@ time_offset: true           # whether to take into account a possible sync offse
 end_of_sweep: false          # whether the sweep reference time is w.r.t. the start or the end of the scan (only applies to VELODYNE/OUSTER)
 
 calibration:  # automatic IMU calibration (if all set to false, no calibration will be done)
-  gravity_align: true     # estimate gravity vector
-  accel: true             # estimate lin. accel. bias
-  gyro: true              # estimate ang. vel. bias
-  time: 3.               # time to estimate (during this time, the robot must be at stand still)
+  gravity_align: false     # estimate gravity vector
+  accel: false             # estimate lin. accel. bias
+  gyro: false              # estimate ang. vel. bias
+  time: .5               # time to estimate (during this time, the robot must be at stand still)
 
 extrinsics: # w.r.t baselink [SI]
   imu:
-    t: [ 0.51527, -0.00211, -0.18567 ]
-    R: [ 1.,  0.,  0.,
-          0.,  1.,  0.,
-          0.,  0.,  1. ]
+    t: [ 0.0, 0.0, 0.98 ]
+    R: [0., 0., 0.] 
+
   lidar:
-    t: [-0.30, 0.0, 0.98]
-    R: [0.333483, -3.8666532, -0.0038787] 
-    # t: [0.006253, -0.011775, 0.007645]
+    t: [0.006253, -0.011775, 0.007645]
+    R: [0.333483, -0.8666532, -0.0038787]
     # R: [1.0000263, 0.4999751, -0.0043634]
+    # t: [0.006253, -0.011775, 0.007645]
 
 
 intrinsics:
@@ -59,18 +58,18 @@ filters:
 
   voxelGrid:
     active: true
-    leafSize: [ 1., 1., 1. ]
+    leafSize: [ .5, .5, .5 ]
 
   minDistance: # sphere crop
     active: true
     value: 5.5  # [m]
 
   FoV: # crop field of view
-    active: true
+    active: false
     value: 180  # [deg]
   
   rateSampling: # quick downsample
-    active: true
+    active: false
     value: 2
 
 iKFoM:  # Iterative Kalman Filter on Manifolds lib

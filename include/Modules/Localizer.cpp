@@ -182,27 +182,27 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 		                         state_.get_RT() * state_.get_extr_RT());
 
 		if (config.debug) {
+			pcl::transformPointCloud(*deskewed, *final_raw_scan_,
+			                         config.extrinsics.imu2baselink_T *  state_.get_extr_RT());
+
 			crop_filter_.setMin(Vector4f(-1.7, -.7, -3.0, 1.)); 
 			crop_filter_.setMax(Vector4f(2.0, .7, 3.0, 1.));
-			crop_filter_.setInputCloud(deskewed);
+			crop_filter_.setInputCloud(final_raw_scan_);
 			crop_filter_.filter(*final_raw_scan_);
 
-			crop_filter_.setMin(Vector4f(-1.7, -.5, -3.0, 1.)); 
-			crop_filter_.setMax(Vector4f(9.0, .5, -0.25, 1.));
+			crop_filter_.setMin(Vector4f(-1.7, -.7, -3.0, 1.)); 
+			crop_filter_.setMax(Vector4f(9.0, .7, -0, 1.));
 			crop_filter_.setInputCloud(final_raw_scan_);
 			crop_filter_.filter(*final_raw_scan_);
 
 			pcl::transformPointCloud(*final_raw_scan_, *final_raw_scan_,
-			                         state_.get_RT() * state_.get_extr_RT());
+		                         state_.get_RT());
 
-			if (config.ransac)
+			if (config.ransac) {
 				final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);
+			}
 		}
 
-		// std::vector<pcl::PointXYZ> update_cloud(final_scan_->points.size());
-		// for (const auto& p : final_scan_->points) {
-			// update_cloud.emplace_back(pcl::PointXYZ(p.x, p.y, p.z));
-		// }
 		map.update(final_scan_->points, config.ioctree.downsample);
 
 	} else {
@@ -237,6 +237,7 @@ IMUmeas Localizer::imu2baselink(IMUmeas& imu) {
 
 	IMUmeas imu_baselink;
 
+	imu_stamp_ = imu.stamp;
 	double dt = imu.stamp - prev_imu_stamp_;
 	
 	if ( (dt == 0.) || (dt > 0.1) ) { dt = 1.0/400.0; }
@@ -275,7 +276,6 @@ void Localizer::updateIMU(IMUmeas& imu) {
 
 	imu = imu2baselink(imu);
 
-	imu_stamp_ = imu.stamp;
 	// imu.dt = imu.stamp - prev_imu_stamp_;
 	
 	// if ( (imu.dt == 0.) || (imu.dt > 0.1) ) { imu.dt = 1.0/400.0; }

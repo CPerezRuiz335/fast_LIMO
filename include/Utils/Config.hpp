@@ -154,12 +154,13 @@ namespace fast_limo {
         extrinsics.imu2baselink_T.translation() = Vector3f(tmp[0], tmp[1], tmp[2]);
 
       nh.getParam("extrinsics/imu/R", tmp);
-      if (tmp.size() >= 9) {
-        Matrix3f R_imu;
-        R_imu << tmp[0], tmp[1], tmp[2],
-                 tmp[3], tmp[4], tmp[5],
-                 tmp[6], tmp[7], tmp[8];
-        extrinsics.imu2baselink_T.linear() = R_imu;
+      if (tmp.size() == 3) {
+        Matrix3f R_lidar = (Eigen::AngleAxisf(tmp[0] * M_PI/180., Eigen::Vector3f::UnitX()) *
+                           Eigen::AngleAxisf(tmp[1] * M_PI/180., Eigen::Vector3f::UnitY()) *
+                           Eigen::AngleAxisf(tmp[2] * M_PI/180., Eigen::Vector3f::UnitZ())
+                            ).toRotationMatrix();
+
+        extrinsics.imu2baselink_T.linear() = R_lidar;
       }
 
       nh.getParam("extrinsics/lidar/t", tmp);
