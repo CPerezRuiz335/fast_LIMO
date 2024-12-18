@@ -58,9 +58,14 @@ void Localizer::init() {
 	propagated_buffer_.set_capacity(2000);
 
 
-  crop_filter_.setNegative(true);
-	crop_filter_.setMin(Vector4f(-1.7, -.5, -3.0, 1.)); 
-	crop_filter_.setMax(Vector4f(2.0, .5, 3.0, 1.));
+  up_crop_filter_.setNegative(true);
+	up_crop_filter_.setMin(config.output.up_cropBoxMin); 
+	up_crop_filter_.setMax(config.output.up_cropBoxMax);
+
+  down_crop_filter_.setNegative(true);
+	down_crop_filter_.setMin(config.output.down_cropBoxMin); 
+	down_crop_filter_.setMax(config.output.down_cropBoxMax);
+
 
 	voxel_filter_.setLeafSize(config.filters.leafSize);
 		
@@ -182,21 +187,30 @@ void Localizer::updatePointCloud(PointCloudT::Ptr& raw_pc, double time_stamp) {
 		                         state_.get_RT() * state_.get_extr_RT());
 
 		if (config.debug) {
-			pcl::transformPointCloud(*deskewed, *final_raw_scan_,
+			PointCloudT::Ptr output(boost::make_shared<PointCloudT>());
+
+			pcl::transformPointCloud(*deskewed, *output,
 			                         config.extrinsics.imu2baselink_T *  state_.get_extr_RT());
 
-			crop_filter_.setMin(Vector4f(-1.7, -.7, -3.0, 1.)); 
-			crop_filter_.setMax(Vector4f(2.0, .7, 3.0, 1.));
-			crop_filter_.setInputCloud(final_raw_scan_);
-			crop_filter_.filter(*final_raw_scan_);
+			if (config.output.crop_active) {
+				up_crop_filter_.setInputCloud(output);
+				up_crop_filter_.filter(*output);
 
-			crop_filter_.setMin(Vector4f(-1.7, -.7, -3.0, 1.)); 
-			crop_filter_.setMax(Vector4f(9.0, .7, -0, 1.));
-			crop_filter_.setInputCloud(final_raw_scan_);
-			crop_filter_.filter(*final_raw_scan_);
+				down_crop_filter_.setInputCloud(output);
+				down_crop_filter_.filter(*output);
+			}
 
-			pcl::transformPointCloud(*final_raw_scan_, *final_raw_scan_,
-		                         state_.get_RT());
+			if (config.output.radial_active) {
+				PointCloudT::Ptr tmp(boost::make_shared<PointCloudT>());
+				for (const auto& p : output->points) {
+					if (Eigen::Vector3f(p.x, p.y, p.z).norm() > config.output.distance
+						  and fabs(atan2(p.y, p.x)) < 100 * M_PI/180.)
+						tmp->points.push_back(p);
+				}
+				*output = *tmp;
+			}
+
+			pcl::transformPointCloud(*output, *final_raw_scan_, state_.get_RT());
 
 			if (config.ransac) {
 				final_raw_scan_ = algorithms::removeRANSACInliers<PointType>(final_raw_scan_);

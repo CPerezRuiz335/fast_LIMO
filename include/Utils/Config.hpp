@@ -73,6 +73,16 @@ namespace fast_limo {
       bool fov_active;      // FoV filter
     } filters;
 
+    struct Output {
+      bool crop_active;
+      Vector4f down_cropBoxMin;
+      Vector4f down_cropBoxMax;
+      Vector4f up_cropBoxMin;
+      Vector4f up_cropBoxMax;
+      bool radial_active;
+      float distance;
+    } output;
+
     struct iKFoM {
       struct Mapping {
         int NUM_MATCH_POINTS;   // Number of points that constitute a match
@@ -196,7 +206,7 @@ namespace fast_limo {
       // FILTERS
       nh.getParam("filters/cropBox/active", filters.crop_active);
       nh.getParam("filters/cropBox/box/min", tmp);
-      // if (tmp.size() == 3)
+      if (tmp.size() == 3)
         filters.cropBoxMin = Vector4f(tmp[0], tmp[1], tmp[2], 1.);
 
       nh.getParam("filters/cropBox/box/max", tmp);
@@ -214,12 +224,36 @@ namespace fast_limo {
       nh.getParam("filters/rateSampling/active", filters.rate_active);
       nh.getParam("filters/rateSampling/value", filters.rate_value);
 
-      double fov_deg;
       nh.getParam("filters/FoV/active", filters.fov_active);
 
-      std::cout << "ASDFASDF FOV ACTIVE: " << filters.fov_active << std::endl;
+      double fov_deg;
       nh.getParam("filters/FoV/value", fov_deg);
       filters.fov_angle = fov_deg * M_PI / 360.0; // Convert to radians, half FoV
+
+      // OUTPUT FILTERS
+      nh.getParam("output/cropBox/active", output.crop_active);
+      nh.getParam("output/cropBox/down/min", tmp);
+      output.down_cropBoxMin = Vector4f(tmp[0], tmp[1], tmp[2], 1.);
+
+      nh.getParam("output/cropBox/down/max", tmp);
+      output.down_cropBoxMax = Vector4f(tmp[0], tmp[1], tmp[2], 1.);
+
+      nh.getParam("output/cropBox/up/min", tmp);
+      output.up_cropBoxMin = Vector4f(tmp[0], tmp[1], tmp[2], 1.);
+
+      nh.getParam("output/cropBox/up/max", tmp);
+      output.up_cropBoxMax = Vector4f(tmp[0], tmp[1], tmp[2], 1.);
+
+
+      std::cout << output.down_cropBoxMin << std::endl;
+      std::cout << output.down_cropBoxMax << std::endl;
+      std::cout << output.up_cropBoxMin << std::endl;
+      std::cout << output.up_cropBoxMax << std::endl;
+
+
+
+      nh.getParam("output/radial/active", output.radial_active);
+      nh.getParam("output/radial/value", output.distance);
 
       // iKFoM
       nh.getParam("iKFoM/Mapping/NUM_MATCH_POINTS", ikfom.mapping.NUM_MATCH_POINTS);

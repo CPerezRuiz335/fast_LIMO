@@ -3,7 +3,7 @@
 topics:
   input:
     lidar: /ouster/points
-    imu: /EL/Sensors/vectornav/IMU
+    imu: /ouster/imu
 
 frames: # output frames (the transform between frames will be broadcasted)
   world: global
@@ -14,19 +14,19 @@ num_threads: 4 # OpenMP threads (will be equal to $(nproc) if it is set higher)
 sensor_type: 0  # LiDAR type (0: OUSTER \ 1: VELODYNE \ 2: HESAI \ 3: LIVOX)
 
 debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visualizing purposes
-verbose: false   # print debug/performance board
-TAI_offset: 37.  # offset between imu and lidar frame timestamp, this will be addes to lidar msg stamp
-ransac: false   # wether to apply ransac just for visualization
+verbose: true   # print debug/performance board
+TAI_offset: 0.  # offset between imu and lidar frame timestamp, this will be addes to lidar msg stamp
+ransac: true   # wether to apply ransac just for visualization
 
-estimate_extrinsics: true   # continuous estimation of LiDAR-IMU extrinsics 
+estimate_extrinsics: false   # continuous estimation of LiDAR-IMU extrinsics 
 time_offset: true           # whether to take into account a possible sync offset between IMU and LiDAR (set to true if they are not properly in sync)
 end_of_sweep: false          # whether the sweep reference time is w.r.t. the start or the end of the scan (only applies to VELODYNE/OUSTER)
 
 calibration:  # automatic IMU calibration (if all set to false, no calibration will be done)
-  gravity_align: false     # estimate gravity vector
-  accel: false             # estimate lin. accel. bias
-  gyro: false              # estimate ang. vel. bias
-  time: .5               # time to estimate (during this time, the robot must be at stand still)
+  gravity_align: true     # estimate gravity vector
+  accel: true             # estimate lin. accel. bias
+  gyro: true              # estimate ang. vel. bias
+  time: 1.               # time to estimate (during this time, the robot must be at stand still)
 
 extrinsics: # w.r.t baselink [SI]
   imu:
@@ -49,11 +49,25 @@ intrinsics:
   gyro:
     bias: [ 0.001, 0.001, 0.001 ]  # [rad/s]
 
+output: # output pointcloud filtering
+  cropBox:
+    active: true
+    down:
+      min: [ -5.7, -1., -3.0 ]
+      max: [ 2.0, 1., 3.0 ]
+    up:
+      min: [ -1.7, -2, -10.0 ]
+      max: [ 7.0, 2, -0.10 ]
+  radial:
+    active: true 
+    value: 1.
+
+
 filters:
   cropBox: # prism crop
     active: false
     box:
-      min: [ -1.5, -.5, -3.0 ]  # [m]
+      min: [ -0.5, -0.5, -3.0 ]  # [m]
       max: [ 2.0, .5, 3.0 ]     # [m]
 
   voxelGrid:
@@ -62,7 +76,7 @@ filters:
 
   minDistance: # sphere crop
     active: true
-    value: 5.5  # [m]
+    value: 3.5  # [m]
 
   FoV: # crop field of view
     active: false
