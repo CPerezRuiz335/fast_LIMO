@@ -53,10 +53,6 @@ public:
 
   void imu_callback(const sensor_msgs::Imu::ConstPtr& msg) {
 
-#ifdef PROFILE
-SWRI_PROFILE("imu_callback");
-#endif
-
     Config& cfg = Config::getInstance();
 
     Imu imu = fromROS(msg);
@@ -127,10 +123,6 @@ SWRI_PROFILE("imu_callback");
 
     Config& cfg = Config::getInstance();
 
-#ifdef PROFILE
-SWRI_PROFILE("lidar_callback");
-#endif
-
     PointCloudT::Ptr raw(boost::make_shared<PointCloudT>());
     fromROSmsg2PointT(msg, raw);
 
@@ -147,18 +139,13 @@ SWRI_PROFILE("lidar_callback");
       return;
     }
 
-    PointCloudT::Ptr deskewed(boost::make_shared<PointCloudT>());
-{
-#ifdef PROFILE
-SWRI_PROFILE("deskew");
-#endif  
-
     double offset = 0.0;
     if (cfg.deskew.time_offset) { // automatic sync (not precise!)
       offset = state_.stamp - raw->points.back().stamp - 1.e-4; 
       if (offset > 0.0) offset = 0.0; // don't jump into future
     }
 
+    // Wait for state buffer
     double end_stamp = raw->points.back().stamp + offset;
     if (state_buffer_.empty() || state_buffer_.front().stamp < end_stamp) {
       ROS_INFO_STREAM (
@@ -172,57 +159,35 @@ SWRI_PROFILE("deskew");
       });
     } 
 
-    States interpolated = filter(state_buffer_,
-                                 prev_scan_stamp_,
-                                 raw->points.back().stamp + offset);
+    States interpolated = filter_states(state_buffer_,
+                                        prev_scan_stamp_,
+                                        raw->points.back().stamp + offset);
 
-    deskewed = deskew(raw, state_, interpolated, offset);
-}
+    PointCloudT::Ptr deskewed = deskew(raw, state_, interpolated, offset);
 
-    PointCloudT::Ptr processed(boost::make_shared<PointCloudT>()); 
-{
-#ifdef PROFILE
-SWRI_PROFILE("preprocess");
-#endif
-    processed = process(raw);
-}
-   
+    PointCloudT::Ptr downsampled(deskewed);
 
-    PointCloudT::Ptr downsampled(boost::make_shared<PointCloudT>());
-{
-#ifdef PROFILE
-SWRI_PROFILE("downsample");
-#endif 
-    downsampled  = downsample(processed);
-}
+    if (cfg.filter.voxel_grid.active)
+      downsampled = voxel_grid(deskewed);
+    
+    PointCloudT::Ptr processed = process(downsampled);
 
     if (downsampled->points.empty()) {
       ROS_ERROR("[LIMONCELLO] Processed & downsampled cloud is empty!");
       return;
     }
 
-    Eigen::Affine3f T;
-{
-#ifdef PROFILE
-SWRI_PROFILE("update");
-#endif 
     mtx_state_.lock();
       matches_ = update(IKFoM_, downsampled, ioctree_);
       state_ = State(IKFoM_.get_x(), prev_imu_);
-      T = state_.affine3f() * state_.I2L;
+      Eigen::Affine3f T = state_.affine3f() * state_.I2L;
     mtx_state_.unlock();
-}
 
     PointCloudT::Ptr global(boost::make_shared<PointCloudT>());
     pcl::transformPointCloud(*deskewed, *global, T);
-    pcl::transformPointCloud(*downsampled, *downsampled, T);
+    pcl::transformPointCloud(*processed, *processed, T);
 
-    std::vector<Vec3> udpate_cloud(downsampled->points.size());
-    for (const auto& p : downsampled->points) {
-      update_cloud.emplace_back(Vec3{p.x, p.y, p.z}); 
-    }
-
-    ioctree_.update(udpate_cloud);
+    ioctree_.update(processed->points);
 
     // Publish
     publish(global, nh_, cfg.topics.out.global_frame, cfg.topics.frame_id);

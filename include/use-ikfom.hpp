@@ -124,10 +124,10 @@ void predict(esekfom::esekf<state_ikfom, 12, input_ikfom>& ikfom,
 	in.gyro = imu.ang_vel;
 
 	Eigen::Matrix<double, 12, 12> Q = Eigen::Matrix<double, 12, 12>::Identity();
-	Q.block<3, 3>(0, 0) = config.ikfom.cov_gyro * Eigen::Matrix3d::Identity();
-	Q.block<3, 3>(3, 3) = config.ikfom.cov_acc * Eigen::Matrix3d::Identity();
-	Q.block<3, 3>(6, 6) = config.ikfom.cov_bias_gyro * Eigen::Matrix3d::Identity();
-	Q.block<3, 3>(9, 9) = config.ikfom.cov_bias_acc * Eigen::Matrix3d::Identity();
+	Q.block<3, 3>(0, 0) = cfg.ikfom.cov_gyro * Eigen::Matrix3d::Identity();
+	Q.block<3, 3>(3, 3) = cfg.ikfom.cov_acc * Eigen::Matrix3d::Identity();
+	Q.block<3, 3>(6, 6) = cfg.ikfom.cov_bias_gyro * Eigen::Matrix3d::Identity();
+	Q.block<3, 3>(9, 9) = cfg.ikfom.cov_bias_acc * Eigen::Matrix3d::Identity();
 
   ikfom.predict(dt, Q, in);
 }
@@ -137,7 +137,7 @@ void update(esekfom::esekf<state_ikfom, 12, input_ikfom>& ikfom,
             PointCloudT::Ptr& cloud,
             thuni::Octree& map) {
 
-  Config& config = Config::getInstance();
+  Config& cfg = Config::getInstance();
 
   Matches first_matches;
 
@@ -173,16 +173,16 @@ void update(esekfom::esekf<state_ikfom, 12, input_ikfom>& ikfom,
           std::vector<pcl::PointXYZ> neighbors;
           std::vector<float> pointSearchSqDis;
           map.knnNeighbors(pcl::PointXYZ(g(0), g(1), g(2)),
-                           config.ikfom.mapping.num_match_points,
+                           cfg.ikfom.mapping.num_match_points,
                            neighbors,
                            pointSearchSqDis);
           
-          if (near_points.size() < config.ikfom.mapping.num_match_points 
-              or pointSearchSqDis.back() > config.ikfom.mapping.further_point_dist)
+          if (near_points.size() < cfg.ikfom.mapping.num_match_points 
+              or pointSearchSqDis.back() > cfg.ikfom.mapping.further_point_dist)
                 return;
           
           Eigen::Vector4f p_abcd = Eigen::Vector4f::Zero();
-          if (not estimate_plane(p_abcd, near_points, config.ikfom.mapping.plane_threshold))
+          if (not estimate_plane(p_abcd, near_points, cfg.ikfom.mapping.plane_threshold))
             return;
           
           chosen[i] = true;
@@ -232,7 +232,7 @@ void update(esekfom::esekf<state_ikfom, 12, input_ikfom>& ikfom,
         
         ekfom_data.h_x.block<1, 6>(i,0) << n(0), n(1), n(2), A(0), A(1), A(2);
 
-        if (config.ikfom.estimate_extrinsics)
+        if (cfg.ikfom.estimate_extrinsics)
           ekfom_data.h_x.block<1, 6>(i,6) << B(0), B(1), B(2), C(0), C(1), C(2);
 
         ekfom_data.h(i) = -match.dist2plane();
