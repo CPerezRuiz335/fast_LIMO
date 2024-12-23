@@ -16,7 +16,7 @@ sensor_type: 0  # LiDAR type (0: OUSTER \ 1: VELODYNE \ 2: HESAI \ 3: LIVOX)
 debug: true     # fill useful intermediate pcl (deskewed, final_raw...) for visualizing purposes
 verbose: true   # print debug/performance board
 TAI_offset: 0.  # offset between imu and lidar frame timestamp, this will be addes to lidar msg stamp
-ransac: true   # wether to apply ransac just for visualization
+ransac: false   # wether to apply ransac just for visualization
 
 estimate_extrinsics: false   # continuous estimation of LiDAR-IMU extrinsics 
 time_offset: true           # whether to take into account a possible sync offset between IMU and LiDAR (set to true if they are not properly in sync)
@@ -26,7 +26,7 @@ calibration:  # automatic IMU calibration (if all set to false, no calibration w
   gravity_align: true     # estimate gravity vector
   accel: true             # estimate lin. accel. bias
   gyro: true              # estimate ang. vel. bias
-  time: 1.               # time to estimate (during this time, the robot must be at stand still)
+  time: .5               # time to estimate (during this time, the robot must be at stand still)
 
 extrinsics: # w.r.t baselink [SI]
   imu:
@@ -35,7 +35,7 @@ extrinsics: # w.r.t baselink [SI]
 
   lidar:
     t: [0.006253, -0.011775, 0.007645]
-    R: [0.333483, -0.8666532, -0.0038787]
+    R: [0.333483, -0.00, -0.0038787]
     # R: [1.0000263, 0.4999751, -0.0043634]
     # t: [0.006253, -0.011775, 0.007645]
 
@@ -57,7 +57,7 @@ output: # output pointcloud filtering
       max: [ 2.0, 1., 3.0 ]
     up:
       min: [ -1.7, -2, -10.0 ]
-      max: [ 7.0, 2, -0.10 ]
+      max: [ 7.0, 2, -0.3 ]
   radial:
     active: true 
     value: 1.
