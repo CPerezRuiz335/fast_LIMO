@@ -33,7 +33,6 @@ MTK_BUILD_MANIFOLD(input_ikfom,
 );
 
 
-namespace limoncello {
 
 Eigen::Matrix<double, 24, 1> get_f(state_ikfom& s, const input_ikfom& in) {
   Eigen::Matrix<double, 24, 1> res = Eigen::Matrix<double, 24, 1>::Zero();
@@ -244,4 +243,3 @@ void update(esekfom::esekf<state_ikfom, 12, input_ikfom>& ikfom,
 
 }
 
-} // namespace limoncello

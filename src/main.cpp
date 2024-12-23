@@ -1,154 +1,231 @@
+#include <mutex>
+#include <condition_variable>
+
+#include <Eigen/Dense>
+
+#include <ros/ros.h>
+
+#include <tf2/convert.h>
+
+#include <geometry_msgs/Vector3.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/PointCloud2.h>
+
+#include "Octree.h"
+#include "State.hpp"
+#include "use-ikfom.hpp"
+#include "Imu.hpp"
 #include "ROSutils.hpp"
+#include "Config.hpp"
+#include "Cloud.hpp"
 
-// output publishers
-ros::Publisher pc_pub;
-ros::Publisher state_pub;
 
-// debugging publishers
-ros::Publisher orig_pub, desk_pub, match_pub, finalraw_pub, body_pub, normals_pub;
+class Manager {
+  State state_;
+  States state_buffer_;
+  
+  Imu prev_imu_;
+  double first_imu_stamp_;
+  double prev_scan_stamp_;
 
-// output frames
-std::string world_frame, body_frame;
+  bool imu_calibrated_;
 
-void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
-    static bool first(true);
-    static double first_time;
+  std::mutex mtx_state_;
+  std::mutex mtx_buffer_;
 
-    if (first) {
-        first_time = msg->header.stamp.toSec();
-        first = false;
+  std::condition_variable cv_prop_stamp_;
+
+  ros::NodeHandle nh_;
+
+  esekfom::esekf<state_ikfom, 12, input_ikfom> IKFoM_;
+  thuni::Octree ioctree_;
+  
+public:
+  Manager() : first_imu_stamp_(0.0), prev_scan_stamp_(0.0) {
+    init_IKFoM(IKFoM_);
+    imu_calibrated_ = not Config::getInstance().calibrate_imu; 
+  };
+  
+  ~Manager() = default;
+
+  void imu_callback(const sensor_msgs::Imu::ConstPtr& msg) {
+
+    Config& cfg = Config::getInstance();
+
+    Imu imu = fromROS(msg);
+
+    if (first_imu_stamp_ < 0.)
+      first_imu_stamp_ = imu.stamp;
+
+    double dt = imu.stamp - prev_imu_.stamp;
+    dt = (dt < 0 or dt > 0.1) ? 1./cfg.imu.hz : dt;
+
+    if (not imu_calibrated_) {
+      static int N(0);
+      static Eigen::Vector3d gyro_avg(0., 0., 0.);
+      static Eigen::Vector3d accel_avg(0., 0., 0.);
+      static Eigen::Vector3d grav_vec(0., 0., cfg.gravity);
+
+      if ((imu.stamp - first_imu_stamp_) < cfg.imu.calib_time) {
+        gyro_avg  += imu.ang_vel;
+        accel_avg += imu.lin_accel; 
+        N++;
+
+      } else {
+        gyro_avg /= N;
+        accel_avg /= N;
+
+        if (cfg.calibration.gravity_align) {
+          grav_vec = accel_avg.normalized() * abs(cfg.gravity);
+          Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(
+                                        grav_vec, 
+                                        Eigen::Vector3d(0., 0., cfg.gravity));
+          state_.q = q;
+          state_.g = grav_vec;
+        }
+        
+        if (cfg.calibration.accel_bias)
+          state_.b.accel = accel_avg - grav_vec;
+
+        if (cfg.calibration.gyro_bias)
+          state_.b.gyro = gyro_avg;
+
+        setIKFoM_state(IKFoM_, state_);
+      }
+
+    } else {
+      imu = imu2baselink(imu, dt);
+      imu = correct_imu(imu, state_.b.gyro, state_.b.accel, cfg.imu.intrinsics.sm);
+      
+      prev_imu_ = imu;
+
+      mtx_state_.lock();
+        predict(IKFoM_, imu, dt);
+      mtx_state_.unlock();
+
+      state_ = State(IKFoM_.get_x(), imu);
+
+      mtx_buffer_.lock();
+        state_buffer_.push_front(state_);
+      mtx_buffer_.unlock();
+
+      cv_prop_stamp_.notify_one();
+
+      publish(state_, nh_, cfg.topics.out.state, cfg.topics.frame_id, IKFoM_.get_P());
     }
 
-    double stamp = fast_limo::Config::getInstance().start_rosbag 
-                 + (msg->header.stamp.toSec() - first_time); 
+  }
 
-    PointCloudT::Ptr pc_ (boost::make_shared<PointCloudT>());
-    pcl::fromROSMsg(*msg, *pc_);
+  void lidar_callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
 
-    fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
-    if (fast_limo::Config::getInstance().start_rosbag < 0)
-        loc.updatePointCloud(pc_, msg->header.stamp.toSec() + 37.); //constant for UTC to TAI
-    else
-        loc.updatePointCloud(pc_, stamp);
+    Config& cfg = Config::getInstance();
 
+    PointCloudT::Ptr raw(boost::make_shared<PointCloudT>());
+    fromROSmsg2PointT(msg, raw);
 
-    // Publish output pointcloud
-    sensor_msgs::PointCloud2 pc_ros;
-    pcl::toROSMsg(*loc.get_pointcloud(), pc_ros);
-    pc_ros.header.stamp = ros::Time::now();
-    pc_ros.header.frame_id = world_frame;
-    pc_pub.publish(pc_ros);
+    if (raw->points.empty()) {
+      ROS_ERROR("[LIMONCELLO] Raw PointCloud is empty!");
+      return;
+    }
 
-    // Publish debugging pointclouds
-    sensor_msgs::PointCloud2 orig_msg;
-    pcl::toROSMsg(*loc.get_orig_pointcloud(), orig_msg);
-    orig_msg.header.stamp = ros::Time::now();
-    orig_msg.header.frame_id = world_frame;
-    orig_pub.publish(orig_msg);
+    if (not imu_calibrated_)
+      return;
+    
+    if (state_buffer_.empty()) {
+      ROS_ERROR("[LIMONCELLO] No IMUs received");
+      return;
+    }
 
-    sensor_msgs::PointCloud2 deskewed_msg;
-    pcl::toROSMsg(*loc.get_deskewed_pointcloud(), deskewed_msg);
-    deskewed_msg.header.stamp = ros::Time::now();
-    deskewed_msg.header.frame_id = world_frame;
-    desk_pub.publish(deskewed_msg);
+    double offset = 0.0;
+    if (cfg.deskew.time_offset) { // automatic sync (not precise!)
+      offset = state_.stamp - raw->points.back().stamp - 1.e-4; 
+      if (offset > 0.0) offset = 0.0; // don't jump into future
+    }
 
-    sensor_msgs::PointCloud2 match_msg;
-    pcl::toROSMsg(*loc.get_pc2match_pointcloud(), match_msg);
-    match_msg.header.stamp = ros::Time::now();
-    match_msg.header.frame_id = body_frame;
-    match_pub.publish(match_msg);
+    // Wait for state buffer
+    double end_stamp = raw->points.back().stamp + offset;
+    if (state_buffer_.empty() || state_buffer_.front().stamp < end_stamp) {
+      ROS_INFO_STREAM (
+        "PROPAGATE WAITING... \n"
+        "     - buffer time: " << state_buffer_.front().stamp << "\n"
+        "     - end scan time: " << end_stamp);
 
-    sensor_msgs::PointCloud2 finalraw_msg;
-    pcl::toROSMsg(*loc.get_finalraw_pointcloud(), finalraw_msg);
-    finalraw_msg.header.stamp = ros::Time::now();
-    finalraw_msg.header.frame_id = world_frame;
-    finalraw_pub.publish(finalraw_msg);
+      std::unique_lock<decltype(mtx_buffer_)> lock(mtx_buffer_);
+      cv_prop_stamp_.wait(lock, [this, &end_stamp] { 
+          return state_buffer_.front().stamp >= end_stamp;
+      });
+    } 
 
-    sensor_msgs::PointCloud2 normals_msg;
-    pcl::toROSMsg(*loc.get_matches_pointcloud(), normals_msg);
-    normals_msg.header.stamp = ros::Time::now();
-    normals_msg.header.frame_id = world_frame;
-    normals_pub.publish(normals_msg);
+    States interpolated = filter_states(state_buffer_,
+                                        prev_scan_stamp_,
+                                        raw->points.back().stamp + offset);
 
-}
+    PointCloudT::Ptr deskewed = deskew(raw, state_, interpolated, offset);
 
-void imu_callback(const sensor_msgs::Imu::ConstPtr& msg){
+    PointCloudT::Ptr downsampled(deskewed);
 
+    if (cfg.filter.voxel_grid.active)
+      downsampled = voxel_grid(deskewed);
+    
+    PointCloudT::Ptr processed = process(downsampled);
 
-    fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
+    if (downsampled->points.empty()) {
+      ROS_ERROR("[LIMONCELLO] Processed & downsampled cloud is empty!");
+      return;
+    }
 
-    fast_limo::IMUmeas imu;
-    tf_limo::fromROStoLimo(msg, imu);
+    mtx_state_.lock();
+      matches_ = update(IKFoM_, downsampled, ioctree_);
+      state_ = State(IKFoM_.get_x(), prev_imu_);
+      Eigen::Affine3f T = state_.affine3f() * state_.I2L;
+    mtx_state_.unlock();
 
-    // Propagate IMU measurement
-    loc.updateIMU(imu);
+    PointCloudT::Ptr global(boost::make_shared<PointCloudT>());
+    pcl::transformPointCloud(*deskewed, *global, T);
+    pcl::transformPointCloud(*processed, *processed, T);
 
-    // State publishing
-    nav_msgs::Odometry state_msg, body_msg;
-    tf_limo::fromLimoToROS(loc.getWorldState(), loc.getPoseCovariance(), loc.getTwistCovariance(), state_msg);
-    tf_limo::fromLimoToROS(loc.getBodyState(), loc.getPoseCovariance(), loc.getTwistCovariance(), body_msg);
+    ioctree_.update(processed->points);
 
-    // Fill frame id's
-    state_msg.header.frame_id = world_frame;
-    state_msg.child_frame_id  = body_frame;
-    body_msg.header.frame_id  = world_frame;
-    body_msg.child_frame_id   = body_frame;
+    // Publish
+    publish(global, nh_, cfg.topics.out.global_frame, cfg.topics.frame_id);
+    publish(state_, nh_, cfg.topics.out.state, cfg.topics.frame_id, IKFoM_.get_P());
 
-    state_pub.publish(state_msg);
-    body_pub.publish(body_msg);
+  }
 
-    // TF broadcasting
-    tf_limo::broadcastTF(loc.getWorldState(), world_frame, body_frame, true);
+};
 
-}
-
-void mySIGhandler(int sig){
-    ros::shutdown();
-}
 
 int main(int argc, char** argv) {
-	std::cout << std::setprecision(18);
 
-    ros::init(argc, argv, "fast_limo");
-    ros::NodeHandle nh("~");
+  ros::init(argc, argv, "limoncello");
+  ros::NodeHandle nh("~");
 
-    signal(SIGINT, mySIGhandler); // override default ros sigint signal
+  // Setup config parameters TODO
+  Config& config = Config::getInstance();
+  config.fill(nh);
 
-    // Setup config parameters
-    fast_limo::Config& config = fast_limo::Config::getInstance();
-    config.fill(nh);
+  // Initialize manager (reads from config)
+  Manager manager = Manager();
 
-    // Declare the one and only Localizer and Mapper objects
-    fast_limo::Localizer& loc = fast_limo::Localizer::getInstance();
+  // Subscribers
+  ros::Subscriber lidar_sub = nh.subscribe(config.topics.in.lidar,
+                                           1,
+                                           &Manager::lidar_callback,
+                                           &manager,
+                                           ros::TransportHints().tcpNoDelay());
 
-    // Read frames names
-    nh.param<std::string>("frames/world", world_frame, "map");
-    nh.param<std::string>("frames/body", body_frame, "base_link");
+  ros::Subscriber imu_sub = nh.subscribe(config.topics.in.imu,
+                                         1000,
+                                         &Manager::imu_callback,
+                                         &manager,
+                                         ros::TransportHints().tcpNoDelay());
 
-    // Define subscribers & publishers
-    ros::Subscriber lidar_sub = nh.subscribe(config.topics.lidar, 1, &lidar_callback, ros::TransportHints().tcpNoDelay());
-    ros::Subscriber imu_sub   = nh.subscribe(config.topics.imu, 1000, &imu_callback, ros::TransportHints().tcpNoDelay());
+  ros::AsyncSpinner spinner(0);
+  spinner.start();
+  
+  ros::waitForShutdown();
 
-    pc_pub      = nh.advertise<sensor_msgs::PointCloud2>("pointcloud", 1);
-    state_pub   = nh.advertise<nav_msgs::Odometry>("state", 1);
+  return 0;
 
-    // debug
-    orig_pub     = nh.advertise<sensor_msgs::PointCloud2>("original", 1);
-    desk_pub     = nh.advertise<sensor_msgs::PointCloud2>("deskewed", 1);
-    match_pub    = nh.advertise<sensor_msgs::PointCloud2>("match", 1);
-    finalraw_pub = nh.advertise<sensor_msgs::PointCloud2>("full_pcl", 1);
-    normals_pub  = nh.advertise<sensor_msgs::PointCloud2>("normals", 1);
-    body_pub     = nh.advertise<nav_msgs::Odometry>("body_state", 1);
-
-    // Set up fast_limo config
-    loc.init();
-
-    // Start spinning (async)
-    // ros::spin();
-    ros::AsyncSpinner spinner(0);
-    spinner.start();
-
-    ros::waitForShutdown();
-
-    return 0;
 }
+

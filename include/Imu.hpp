@@ -4,20 +4,17 @@
 
 #include "Config.hpp"
 
-namespace limoncello {
-  
- struct Imu {
-   double stamp;
-   Eigen::Vector3d ang_vel;
-   Eigen::Vector3d lin_accel;
-   Eigen::Quaterniond q;
+struct Imu {
+  double stamp;
+  Eigen::Vector3d ang_vel;
+  Eigen::Vector3d lin_accel;
+  Eigen::Quaterniond q;
 
-   Imu() : stamp(0.),
-           ang_vel(Eigen::Vector3d::Zero()),
-           lin_accel(Eigen::Vector3d::Zero()),
-           q(Eigen::Quaterniond::Identity()) {}
-
- };
+  Imu() : stamp(0.),
+          ang_vel(Eigen::Vector3d::Zero()),
+          lin_accel(Eigen::Vector3d::Zero()),
+          q(Eigen::Quaterniond::Identity()) {}
+};
 
 Imu correct_imu(const Imu& imu, 
                 const Eigen::Vector3d& gyro_bias,
@@ -59,6 +56,4 @@ Imu imu2baselink(const Imu& imu, const double& dt) {
   out.q = q * imu.q;
 
   return out;
-}
-
 }

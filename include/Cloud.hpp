@@ -9,8 +9,6 @@
 #include "PCL.hpp"
 #include "State.hpp"
 
-namespace limoncello {
-
 
 States filter_states(const States& states, const double& start, const double& end) {
 
@@ -78,7 +76,7 @@ PointCloudT::Ptr deskew(const PointCloudT::Ptr& cloud,
   std::iota(indices.begin(), indices.end(), 0);
 
   std::for_each(
-    std::execution::par,
+    std::execution::par_unseq,
     indices.begin(),
     indices.end(),
     [&](int k) {
@@ -161,22 +159,4 @@ PointCloudT::Ptr voxel_grid(const PointCloudT::Ptr& cloud, std::vector<float> le
   voxel_filter.filter(*out);
 
   return out;
-}
-
-PointCloudT::Ptr crop_box(const PointCloudT::Ptr& cloud, 
-                          std::vector<float> min,
-                          std::vector<float> max) {
-
-  PointCloudT::Ptr out(boost::make_shared<PointCloudT>());
-
-  static pcl::CropBox<PointType> filter;
-  filter.setMin(Eigen::Vector4f(min[0], min[1], min[2], 1.));
-  filter.setMax(Eigen::Vector4f(max[0], max[1], max[2], 1.));
-  filter.setInputCloud(cloud);
-  filter.filter(*out);
-
-  return out;
-}
-
-
 }

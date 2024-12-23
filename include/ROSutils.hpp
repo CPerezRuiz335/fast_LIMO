@@ -23,8 +23,6 @@
 #include "Config.hpp"
 
 
-namespace limoncello {
-
 Imu fromROS(const sensor_msgs::Imu::ConstPtr& in) {
   Imu out;
   out.stamp = in->header.stamp.toSec();
@@ -111,6 +109,4 @@ void publish(State& state,
   static ros::Publisher pub = nh.advertise<nav_msgs::Odometry>(topic, 1000);
 
   pub.publish(out);  
-}
-
 }

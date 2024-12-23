@@ -7,18 +7,9 @@
 #include "PCL.hpp"
 
 
-namespace limoncello {
-
-struct alignas(16) Vec3 {
-  float x;
-  float y;
-  float z;
-};
-
-
 inline bool estimate_plane(Eigen::Vector4f& pabcd,
-                    const std::vector<pcl::PointXYZ>& pts,
-                    const double& thresh) {
+                           const std::vector<pcl::PointXYZ>& pts,
+                           const double& thresh) {
 
   int NUM_MATCH_POINTS = pts.size();
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> A(NUM_MATCH_POINTS, 3);
@@ -88,5 +79,3 @@ struct Match {
     return n(0)*global(0) + n(1)*global(1) + n(2)*global(2) + n(3); 
   }
 };
-
-}

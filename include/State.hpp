@@ -9,8 +9,6 @@
 #include "Config.hpp"
 
 
-namespace limoncello {
-
 struct State {
 
   struct IMUbias {
@@ -49,7 +47,7 @@ struct State {
 
     Eigen::Matrix3f R = Eigen::AngleAxisf(roll  * M_PI/180., Eigen::Vector3f::UnitX()) *
                         Eigen::AngleAxisf(pitch * M_PI/180., Eigen::Vector3f::UnitY()) *
-                        Eigen::AngleAxisf(yaw * M_PI/180., Eigen::Vector3f::UnitZ());
+                        Eigen::AngleAxisf(yaw *   M_PI/180., Eigen::Vector3f::UnitZ());
 
     I2L.rotation() = R;
     I2L.translation() = cfg.extrinsics.t;
@@ -99,8 +97,8 @@ struct State {
     if (w_norm > 1.e-7) {
       Eigen::Vector3f r = w_corrected / w_norm;
       Eigen::Matrix3f K << 0.0, -r[2],  r[1],
-                         r[2],   0.0, -r[0],
-                        -r[1],  r[0],   0.0;
+                          r[2],   0.0, -r[0],
+                         -r[1],  r[0],   0.0;
 
       float r_ang = w_norm * dt;
       R += std::sin(r_ang) * K + (1.0 - std::cos(r_ang)) * K * K;
@@ -133,5 +131,3 @@ struct State {
 };
 
 typedef boost::circular_buffer<State> States;
-
-}
