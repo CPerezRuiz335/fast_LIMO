@@ -32,6 +32,8 @@
 #include <chrono>
 #include <fstream>
 
+#include "Profiler.hpp"
+
 namespace thuni
 {
 
@@ -600,6 +602,8 @@ namespace thuni
     template <typename ContainerT>
     void update(ContainerT &pts_, bool down_size = false)
     {
+PROFC_NODE("iOctree update")
+
       if (m_root_ == 0)
       {
         initialize(pts_);

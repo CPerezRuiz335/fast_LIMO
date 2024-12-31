@@ -35,7 +35,7 @@
 #ifndef ESEKFOM_EKF_HPP
 #define ESEKFOM_EKF_HPP
 
-
+#include <iostream>
 #include <vector>
 #include <cstdlib>
 
@@ -136,45 +136,15 @@ public:
 	esekf(const state &x = state(), const cov  &P = cov::Identity()): x_(x), P_(P) { };
 
 	//receive system-specific models and their differentions
-	//for measurement as an Eigen matrix whose dimension is changing.
-	//calculate  measurement (z), estimate measurement (h), partial
-	// differention matrices (h_x, h_v) and the noise covariance (R)
-	// at the same time, by only one function (h_dyn_share_in).
-	template <typename Iterator>
-	void init_dyn_share(processModel f_in,
-						processMatrix1 f_x_in,
-						processMatrix2 f_w_in,
-						measurementModel_dyn_share h_dyn_share_in,
-						int maximum_iteration,
-						Iterator limit_vector)
-	{
-		f = f_in;
-		f_x = f_x_in;
-		f_w = f_w_in;
-		h_dyn_share = h_dyn_share_in;
-
-		maximum_iter = maximum_iteration;
-		for(int i=0; i<limit_vector.size(); i++)
-		{
-			limit[i] = limit_vector[i];
-		}
-
-		x_.build_S2_state();
-		x_.build_SO3_state();
-		x_.build_vect_state();
-	}
-
-	//receive system-specific models and their differentions
 	//for measurement as a dynamic manifold whose dimension  or type is changing.
 	//calculate  measurement (z), estimate measurement (h), partial differention matrices (h_x, h_v) 
 	//and the noise covariance (R) at the same time, by only one function (h_dyn_share_in).
 	//for any scenarios where it is needed
-	template <typename Iterator>
 	void init_dyn_runtime_share(processModel f_in,
-															processMatrix1 f_x_in,
-															processMatrix2 f_w_in,
-															int maximum_iteration,
-															Iterator limit_vector)
+								processMatrix1 f_x_in,
+								processMatrix2 f_w_in,
+								int maximum_iteration,
+								double tolerance)
 	{
 		f = f_in;
 		f_x = f_x_in;
@@ -183,7 +153,7 @@ public:
 		maximum_iter = maximum_iteration;
 		for(int i=0; i<n; i++)
 		{
-			limit[i] = limit_vector[i];
+			limit[i] = tolerance;
 		}
 
 		x_.build_S2_state();
@@ -196,6 +166,10 @@ public:
 		flatted_state f_ = f(x_, i_in);
 		cov_ f_x_ = f_x(x_, i_in);
 		cov f_x_final;
+
+		std::cout << "m: " << m << std::endl;
+		std::cout << "n: " << n << std::endl;
+
 
 		Matrix<scalar_type, m, process_noise_dof> f_w_ = f_w(x_, i_in);
 		Matrix<scalar_type, n, process_noise_dof> f_w_final;
@@ -267,6 +241,17 @@ public:
 			for(int i = 0; i < process_noise_dof; i++){
 				f_w_final. template block<2, 1>(idx, i) = res_temp_S2 * (f_w_. template block<3, 1>(dim, i));
 			}
+			// int idx = (*it).first;
+			// int dim = (*it).first.second;
+			// int dof = (*it).second;
+			// for(int i = 0; i < n; i++){
+			// 	for(int j=0; j<dof; j++)
+			// 	{f_x_final(idx+j, i) = f_x_(dim+j, i);}
+			// }
+			// for(int i = 0; i < process_noise_dof; i++){
+			// 	for(int j=0; j<dof; j++)
+			// 	{f_w_final(idx+j, i) = f_w_(dim+j, i);}
+			// }
 		}
 	
 	
@@ -300,7 +285,7 @@ public:
 		for(int i=-1; i<maximum_iter; i++)
 		{
 			dyn_share.valid = true;
-			h_dyn_share(x_, dyn_share);
+			h(x_, dyn_share);
 
 
 			if(! dyn_share.valid)

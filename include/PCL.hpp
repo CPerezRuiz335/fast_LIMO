@@ -1,8 +1,15 @@
 #pragma once
 
-#include <vector>
+#include <boost/make_shared.hpp>
+
+#include <functional>
+#include <iostream>
+#include <algorithm>
+
+#include <sensor_msgs/PointCloud2.h>
 
 #define PCL_NO_PRECOMPILE
+#include <pcl/io/pcd_io.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/common/transforms.h>
@@ -13,6 +20,7 @@
 
 #include "Config.hpp"
 
+
 struct EIGEN_ALIGN16 PointT {
   PCL_ADD_POINT4D;
   float intensity;
@@ -22,7 +30,7 @@ struct EIGEN_ALIGN16 PointT {
     double timestamp;  // (Hesai) absolute timestamp in seconds
                        // (Livox) absolute timestamp in (seconds * 10e9)
   };
-  // float range;         // (Ouster) distance in militers
+  float range;         // (Ouster) distance in militers
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
@@ -34,7 +42,36 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(PointT,
   (std::uint32_t, t, t)
   (float, time, time)
   (double, timestamp, timestamp)
+  (float, range, range)
 )
 
-
 typedef pcl::PointCloud<PointT> PointCloudT;
+typedef std::function<double(const PointT&, const double&)> PointTime;
+
+
+PointTime point_time_func() {
+  Config& cfg = Config::getInstance();
+
+  if (cfg.sensors.lidar.type == 0) { // OUSTER
+    return cfg.sensors.lidar.end_of_sweep
+        ? [] (const PointT& p, const double& sweep_time) { return sweep_time - p.t * 1e-9f; }
+        : [] (const PointT& p, const double& sweep_time) { return sweep_time + p.t * 1e-9f; };
+
+  } else if (cfg.sensors.lidar.type == 1) { // VELODYNE
+    return cfg.sensors.lidar.end_of_sweep
+        ? [] (const PointT& p, const double& sweep_time) { return sweep_time - p.time; }
+        : [] (const PointT& p, const double& sweep_time) { return sweep_time + p.time; };
+
+  } else if (cfg.sensors.lidar.type == 2) { // HESAI
+    return [] (const PointT& p, const double& sweep_time) { return p.timestamp; };
+
+  } else if (cfg.sensors.lidar.type == 3) { // LIVOX
+    return [] (const PointT& p, const double& sweep_time) { return p.timestamp * 1e-9f; };
+
+  } else {
+    std::cout << "-------------------------------------------\n";
+    std::cout << "LiDAR sensor type unknown or not specified!\n";
+    std::cout << "-------------------------------------------\n";
+    throw std::runtime_error("LiDAR sensor type unknown or not specified");
+  }
+}

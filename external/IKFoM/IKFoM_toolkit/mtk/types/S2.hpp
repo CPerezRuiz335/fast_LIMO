@@ -242,7 +242,12 @@ public:
 				scalar v_sin = (MTK::hat(vec)*subtrahend.vec).norm();
 				scalar v_cos = vec.transpose() * subtrahend.vec;
 				
-				res = Bx.transpose() * (std::atan2(v_sin, v_cos)/v_sin*MTK::hat(vec)+MTK::hat(vec)*subtrahend.vec*((-v_cos/v_sin/v_sin/length/length/length/length+std::atan2(v_sin, v_cos)/v_sin/v_sin/v_sin)*subtrahend.vec.transpose()*MTK::hat(vec)*MTK::hat(vec)-vec.transpose()/length/length/length/length));
+				res = Bx.transpose() * (std::atan2(v_sin, v_cos)/
+				v_sin*MTK::hat(vec)+MTK::hat(vec)*
+				subtrahend.vec*((-v_cos/v_sin/v_sin/length/length/length/
+												length+std::atan2(v_sin, v_cos)/v_sin/v_sin/v_sin)*
+												subtrahend.vec.transpose()*MTK::hat(vec)
+												*MTK::hat(vec)-vec.transpose()/length/length/length/length));
 			}
 			else
 			{

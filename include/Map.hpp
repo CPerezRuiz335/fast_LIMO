@@ -79,3 +79,5 @@ struct Match {
     return n(0)*global(0) + n(1)*global(1) + n(2)*global(2) + n(3); 
   }
 };
+
+typedef std::vector<Match> Matches;

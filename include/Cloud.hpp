@@ -8,39 +8,29 @@
 
 #include "PCL.hpp"
 #include "State.hpp"
+#include "Profiler.hpp"
+#include "Config.hpp"
 
 
 States filter_states(const States& states, const double& start, const double& end) {
 
-  States::reverse_iterator begin_prop_it;
-  States::reverse_iterator end_prop_it;
+  States::const_reverse_iterator begin_prop_it;
+  States::const_reverse_iterator end_prop_it;
 
-  auto prop_it = states.begin();
+  States out(100);
 
-  auto last_prop_it = prop_it;
-  prop_it++;
+  for (const auto& state : states) {
+    if (state.stamp >= end)
+      continue;
 
-  while (prop_it != states.end() && prop_it->stamp >= end) {
-    last_prop_it = prop_it;
-    prop_it++;
+    if (state.stamp >= start)
+      out.push_front(state);
+    
+    if (state.stamp < start) {
+      out.push_front(state);
+      break;
+    }
   }
-
-  while (prop_it != states.end() && prop_it->stamp >= start) {
-    prop_it++;
-  }
-
-  if (prop_it == states.end()) {
-    return States();
-  }
-
-  prop_it++;
-
-  end_prop_it = States::reverse_iterator(last_prop_it);
-  begin_prop_it = States::reverse_iterator(prop_it);
-
-  States out;
-  for (auto it = begin_prop_it; it != end_prop_it; it++)
-    out.push_back(*it);
 
   return out;
 }
@@ -49,8 +39,11 @@ States filter_states(const States& states, const double& start, const double& en
 PointCloudT::Ptr deskew(const PointCloudT::Ptr& cloud,
                         const State& state,
                         const States& buffer,
-                        const double& offset) {
+                        const double& offset,
+                        const double& sweep_time) {
   
+PROFC_NODE("deskew")
+
   auto binary_search = [&](const double& t) {
     int low = 0;
     int high = buffer.size() - 1;
@@ -69,6 +62,9 @@ PointCloudT::Ptr deskew(const PointCloudT::Ptr& cloud,
     return high;
   };
 
+
+  PointTime point_time = point_time_func();
+
   PointCloudT::Ptr out(boost::make_shared<PointCloudT>());
   out->points.resize(cloud->points.size());
 
@@ -80,18 +76,17 @@ PointCloudT::Ptr deskew(const PointCloudT::Ptr& cloud,
     indices.begin(),
     indices.end(),
     [&](int k) {
-      int i_f = binary_search(cloud->points[k].stamp + offset);
+      int i_f = binary_search(point_time(cloud->points[k], sweep_time) + offset);
 
       State X0 = buffer[i_f];
-      X0.update(cloud->points[k].stamp + offset);
+      X0.update(point_time(cloud->points[k], sweep_time) + offset);
 
       Eigen::Affine3f T0 = X0.affine3f() * X0.I2L;
       Eigen::Affine3f TN = state.affine3f() * state.I2L;
 
 
-      Eigen::Vector3f p << cloud->points[k].x,
-                           cloud->points[k].y,
-                           cloud->points[k].z;
+      Eigen::Vector3f p;  
+      p << cloud->points[k].x, cloud->points[k].y, cloud->points[k].z;
 
       p = TN.inverse() * T0 * p;
 
@@ -110,6 +105,10 @@ PointCloudT::Ptr deskew(const PointCloudT::Ptr& cloud,
 
 
 PointCloudT::Ptr process(const PointCloudT::Ptr& cloud) {
+
+PROFC_NODE("filter")
+
+
   Config& cfg = Config::getInstance();
 
   PointCloudT::Ptr out(boost::make_shared<PointCloudT>());
@@ -123,21 +122,21 @@ PointCloudT::Ptr process(const PointCloudT::Ptr& cloud) {
         bool pass = true;
 
         // Distance filter
-        if (cfg.filters.dist_active) {
-            if (Eigen::Vector3f(p.x, p.y, p.z).norm() <= cfg.filters.min_dist)
-                pass = false;
+        if (cfg.filters.min_distance.active) {
+          if (Eigen::Vector3f(p.x, p.y, p.z).norm() <= cfg.filters.min_distance.value)
+              pass = false;
         }
 
         // Rate filter
-        if (cfg.filters.rate_active) {
-            if (index % cfg.filters.rate_value != 0)
-                pass = false;
+        if (cfg.filters.rate_sampling.active) {
+          if (index % cfg.filters.rate_sampling.value != 0)
+              pass = false;
         }
 
         // Field of view filter
-        if (cfg.filters.fov_active) {
-            if (fabs(atan2(p.y, p.x)) >= cfg.filters.fov_angle)
-                pass = false;
+        if (cfg.filters.fov.active) {
+          if (fabs(atan2(p.y, p.x)) >= cfg.filters.fov.value)
+              pass = false;
         }
 
         ++index; // Increment index
@@ -150,13 +149,19 @@ PointCloudT::Ptr process(const PointCloudT::Ptr& cloud) {
 }
 
 
-PointCloudT::Ptr voxel_grid(const PointCloudT::Ptr& cloud, std::vector<float> leafSize) {
-  static pcl::VoxelGrid<PointType> filter;
-  filter.setLeafSize(Eigen::Vector4f(leafSize[0], leafSize[1], leafSize[2], 1.));
+PointCloudT::Ptr voxel_grid(const PointCloudT::Ptr& cloud) {
+
+PROFC_NODE("downsample")
+
+
+  Config& cfg = Config::getInstance();
+
+  static pcl::VoxelGrid<PointT> filter;
+  filter.setLeafSize(cfg.filters.voxel_grid.leaf_size.cast<float>());
 
   PointCloudT::Ptr out(boost::make_shared<PointCloudT>());
-  voxel_filter.setInputCloud(cloud);
-  voxel_filter.filter(*out);
+  filter.setInputCloud(cloud);
+  filter.filter(*out);
 
   return out;
 }

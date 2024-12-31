@@ -16,25 +16,12 @@ struct Imu {
           q(Eigen::Quaterniond::Identity()) {}
 };
 
-Imu correct_imu(const Imu& imu, 
-                const Eigen::Vector3d& gyro_bias,
-                const Eigen::Vector3d& accel_bias,
-                const Eigen::Matrix3d& sm) {
-  
-  Imu out = imu;
-
-  out.lin_accel = sm * imu.lin_accel - accel_bias;
-  out.ang_vel = imu.ang_vel - gyro_bias;
-
-  return out;
-}
-
 Imu imu2baselink(const Imu& imu, const double& dt) {
   
   Config& cfg = Config::getInstance();
 
-  static Eigen::Matrix3d R = cfg.extrinsics.imu2baselink_T.rotation().cast<double>();
-  static Eigen::Vector3d t = cfg.extrinsics.imu2baselink_T.translation().cast<double>();
+  static Eigen::Matrix3d R = cfg.sensors.extrinsics.imu2baselink_T.linear();
+  static Eigen::Vector3d t = cfg.sensors.extrinsics.imu2baselink_T.translation();
 
   Eigen::Vector3d ang_vel_cg = R * imu.ang_vel;
   static Eigen::Vector3d ang_vel_cg_prev = ang_vel_cg;
