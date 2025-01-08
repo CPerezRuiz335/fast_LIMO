@@ -9,6 +9,61 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+#include <iostream>
+#include <iomanip> 
+#include <type_traits>
+
+// Helper to check if a type is printable with std::cout
+template <typename T, typename = void>
+struct is_printable : std::false_type {};
+
+template <typename T>
+struct is_printable<T, std::void_t<decltype(std::cout << std::declval<T>())>> : std::true_type {};
+
+// Helper to check if a type is iterable
+template <typename T, typename = void>
+struct is_iterable : std::false_type {};
+
+template <typename T>
+struct is_iterable<T, std::void_t<decltype(std::begin(std::declval<T>())), decltype(std::end(std::declval<T>()))>> : std::true_type {};
+
+// Generic print function for printable objects
+template <typename T>
+typename std::enable_if<is_printable<T>::value && !is_iterable<T>::value>::type
+print(const T& value, int precision = 3) {
+    std::cout << std::fixed << std::setprecision(precision) << value << std::endl;
+    std::cout.unsetf(std::ios::fixed);
+    std::cout.precision(6); // Restore default
+}
+
+// Print function for iterable containers
+template <typename Container>
+typename std::enable_if<is_iterable<Container>::value>::type
+print(const Container& container, int precision = 3) {
+    std::cout << "[";
+    bool first = true;
+    for (const auto& element : container) {
+        if (!first) std::cout << ", ";
+        first = false;
+        print(element, precision); // Recursively print elements
+    }
+    std::cout << "]" << std::endl;
+}
+
+// Specialization for Eigen matrices/vectors
+template <typename Derived>
+void print(const Eigen::MatrixBase<Derived>& matrix, int precision = 3) {
+    std::cout << std::fixed << std::setprecision(precision) << matrix << std::endl;
+    std::cout.unsetf(std::ios::fixed);
+    std::cout.precision(6); // Restore default
+}
+
+// Fallback for unsupported types
+template <typename T>
+typename std::enable_if<!is_printable<T>::value && !is_iterable<T>::value>::type
+print(const T&, int = 3) {
+    std::cerr << "Error: Type is not printable!" << std::endl;
+}
 
 struct Config {
 
@@ -54,6 +109,17 @@ struct Config {
   		Eigen::Affine3d imu2baselink_T;
   		Eigen::Affine3d lidar2baselink_T;
   		float gravity;
+
+      struct {
+        double roll, pitch, yaw;
+        Eigen::Vector3d t;
+      } lidar2baselink;
+
+      struct {
+        double roll, pitch, yaw;
+        Eigen::Vector3d t;
+      } imu2baselink;
+
   	} extrinsics;
 
   	struct {
@@ -149,6 +215,7 @@ struct Config {
 
     sensors.extrinsics.imu2baselink_T.setIdentity();
     sensors.extrinsics.imu2baselink_T.translate(Eigen::Vector3d(tmp[0], tmp[1], tmp[2]));
+    sensors.extrinsics.imu2baselink.t = Eigen::Vector3d(tmp[0], tmp[1], tmp[2]);
 
     nh.getParam("sensors/extrinsics/imu2baselink/R", tmp);
     Eigen::Matrix3d R_imu = (
@@ -158,11 +225,17 @@ struct Config {
       ).toRotationMatrix();
 
     sensors.extrinsics.imu2baselink_T.rotate(R_imu);
+    sensors.extrinsics.imu2baselink.roll  = tmp[0] * M_PI/180.;
+    sensors.extrinsics.imu2baselink.pitch = tmp[1] * M_PI/180.;
+    sensors.extrinsics.imu2baselink.yaw   = tmp[2] * M_PI/180.;
+
 
     nh.getParam("sensors/extrinsics/lidar2baselink/t", tmp);
 
     sensors.extrinsics.lidar2baselink_T.setIdentity();
     sensors.extrinsics.lidar2baselink_T.translate(Eigen::Vector3d(tmp[0], tmp[1], tmp[2]));
+    sensors.extrinsics.lidar2baselink.t = Eigen::Vector3d(tmp[0], tmp[1], tmp[2]);
+
 
     nh.getParam("sensors/extrinsics/lidar2baselink/R", tmp);
     Eigen::Matrix3d R_lidar = (
@@ -172,6 +245,9 @@ struct Config {
       ).toRotationMatrix();
 
     sensors.extrinsics.lidar2baselink_T.rotate(R_lidar);
+    sensors.extrinsics.lidar2baselink.roll  = tmp[0] * M_PI/180.;
+    sensors.extrinsics.lidar2baselink.pitch = tmp[1] * M_PI/180.;
+    sensors.extrinsics.lidar2baselink.yaw   = tmp[2] * M_PI/180.;
 
     nh.getParam("sensors/extrinsics/gravity", sensors.extrinsics.gravity);
 
@@ -193,13 +269,14 @@ struct Config {
     filters.voxel_grid.leaf_size = Eigen::Vector4d(tmp[0], tmp[1], tmp[2], 1.);
 
     nh.getParam("filters/min_distance/active", filters.min_distance.active);
-    nh.getParam("filters/min_distance/value", filters.min_distance.value);
+    nh.getParam("filters/min_distance/value",  filters.min_distance.value);
 
     nh.getParam("filters/fov/active", filters.fov.active);
-    nh.getParam("filters/fov/value", filters.fov.value);
+    nh.getParam("filters/fov/value",  filters.fov.value);
+    filters.fov.value *= M_PI/360.;
 
     nh.getParam("filters/rate_sampling/active", filters.rate_sampling.active);
-    nh.getParam("filters/rate_sampling/value", filters.rate_sampling.value);
+    nh.getParam("filters/rate_sampling/value",  filters.rate_sampling.value);
 
 
     // IKFoM
@@ -221,10 +298,10 @@ struct Config {
 
 
     // iOctree
-    nh.getParam("iOctree/order", ioctree.order);
-    nh.getParam("iOctree/min_extent", ioctree.min_extent);
+    nh.getParam("iOctree/order",       ioctree.order);
+    nh.getParam("iOctree/min_extent",  ioctree.min_extent);
     nh.getParam("iOctree/bucket_size", ioctree.bucket_size);
-    nh.getParam("iOctree/downsample", ioctree.downsample);
+    nh.getParam("iOctree/downsample",  ioctree.downsample);
   }
 
   static Config& getInstance() {

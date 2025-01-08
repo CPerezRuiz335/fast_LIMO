@@ -32,7 +32,7 @@
 #include <chrono>
 #include <fstream>
 
-#include "Profiler.hpp"
+#include "Utils/Profiler.hpp"
 
 namespace thuni
 {

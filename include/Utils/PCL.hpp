@@ -18,7 +18,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/passthrough.h>
 
-#include "Config.hpp"
+#include "Utils/Config.hpp"
 
 
 struct EIGEN_ALIGN16 PointT {
@@ -47,6 +47,7 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(PointT,
 
 typedef pcl::PointCloud<PointT> PointCloudT;
 typedef std::function<double(const PointT&, const double&)> PointTime;
+typedef std::function<bool(const PointT&, const PointT&)> PointTimeComp;
 
 
 PointTime point_time_func() {
@@ -54,13 +55,13 @@ PointTime point_time_func() {
 
   if (cfg.sensors.lidar.type == 0) { // OUSTER
     return cfg.sensors.lidar.end_of_sweep
-        ? [] (const PointT& p, const double& sweep_time) { return sweep_time - p.t * 1e-9f; }
-        : [] (const PointT& p, const double& sweep_time) { return sweep_time + p.t * 1e-9f; };
+      ? [] (const PointT& p, const double& sweep_time) { return sweep_time - p.t * 1e-9f; }
+      : [] (const PointT& p, const double& sweep_time) { return sweep_time + p.t * 1e-9f; };
 
   } else if (cfg.sensors.lidar.type == 1) { // VELODYNE
     return cfg.sensors.lidar.end_of_sweep
-        ? [] (const PointT& p, const double& sweep_time) { return sweep_time - p.time; }
-        : [] (const PointT& p, const double& sweep_time) { return sweep_time + p.time; };
+      ? [] (const PointT& p, const double& sweep_time) { return sweep_time - p.time; }
+      : [] (const PointT& p, const double& sweep_time) { return sweep_time + p.time; };
 
   } else if (cfg.sensors.lidar.type == 2) { // HESAI
     return [] (const PointT& p, const double& sweep_time) { return p.timestamp; };
@@ -74,4 +75,37 @@ PointTime point_time_func() {
     std::cout << "-------------------------------------------\n";
     throw std::runtime_error("LiDAR sensor type unknown or not specified");
   }
+}
+
+
+PointTimeComp get_point_time_comp() {
+  Config& cfg = Config::getInstance();
+
+  PointTimeComp point_time_cmp;
+
+  if (cfg.sensors.lidar.type == 0) {
+    
+    if (cfg.sensors.lidar.end_of_sweep)
+      point_time_cmp = [](const PointT& p1, const PointT& p2) { return p1.t > p2.t; };
+    else
+      point_time_cmp = [](const PointT& p1, const PointT& p2) { return p1.t < p2.t; };
+  
+  } else if (cfg.sensors.lidar.type == 1) {
+
+    if (cfg.sensors.lidar.end_of_sweep)
+      point_time_cmp = [](const PointT& p1, const PointT& p2) { return p1.time > p2.time; };
+    else
+      point_time_cmp = [](const PointT& p1, const PointT& p2) { return p1.time < p2.time; };
+
+  } else if (cfg.sensors.lidar.type == 2 or cfg.sensors.lidar.type == 3) {
+    point_time_cmp = [](const PointT& p1, const PointT& p2) { return p1.timestamp > p2.timestamp; };
+
+  } else {
+    std::cout << "-------------------------------------------\n";
+    std::cout << "LiDAR sensor type unknown or not specified!\n";
+    std::cout << "-------------------------------------------\n";
+    throw std::runtime_error("LiDAR sensor type unknown or not specified");
+  }
+
+  return point_time_cmp;
 }

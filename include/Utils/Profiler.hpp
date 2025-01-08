@@ -6,8 +6,6 @@
 #include <mutex>
 #include <set>
 
-#include "Config.hpp"
-
 #define PROFC_NODE(name)                              \
   static ProfileNode __node##__LINE__(name);          \
   TheNodeList::Instance().AddNode(&__node##__LINE__); \

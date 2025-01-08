@@ -2,7 +2,7 @@
 
 #include <Eigen/Dense>
 
-#include "Config.hpp"
+#include "Utils/Config.hpp"
 
 struct Imu {
   double stamp;

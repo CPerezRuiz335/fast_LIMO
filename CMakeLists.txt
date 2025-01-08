@@ -50,16 +50,12 @@ catkin_package(
   INCLUDE_DIRS include
 )
 
-# IKFOM
-add_library(IKFOM INTERFACE)
-target_include_directories(IKFOM INTERFACE
-  external/IKFoM/
-  external/IKFoM/IKFoM_toolkit 
-)
+# Manif
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/external/manif)
 
 # Link libraries
 set(LINK_LIBRARIES
-  IKFOM
+  PRIVATE manif
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${Boost_LIBRARIES}

@@ -6,18 +6,15 @@
 
 #include <boost/circular_buffer.hpp>
 
-#include "PCL.hpp"
-#include "State.hpp"
-#include "Profiler.hpp"
-#include "Config.hpp"
+#include "Core/State.hpp"
+#include "Utils/PCL.hpp"
+#include "Utils/Profiler.hpp"
+#include "Utils/Config.hpp"
 
 
 States filter_states(const States& states, const double& start, const double& end) {
 
-  States::const_reverse_iterator begin_prop_it;
-  States::const_reverse_iterator end_prop_it;
-
-  States out(100);
+  States out(100); // Always initialize circular buffer !!
 
   for (const auto& state : states) {
     if (state.stamp >= end)
@@ -79,11 +76,10 @@ PROFC_NODE("deskew")
       int i_f = binary_search(point_time(cloud->points[k], sweep_time) + offset);
 
       State X0 = buffer[i_f];
-      X0.update(point_time(cloud->points[k], sweep_time) + offset);
+      X0.predict(point_time(cloud->points[k], sweep_time) + offset);
 
-      Eigen::Affine3f T0 = X0.affine3f() * X0.I2L;
-      Eigen::Affine3f TN = state.affine3f() * state.I2L;
-
+      Eigen::Affine3f T0 = X0.affine3f() * X0.I2L_affine3f();
+      Eigen::Affine3f TN = state.affine3f() * state.I2L_affine3f();
 
       Eigen::Vector3f p;  
       p << cloud->points[k].x, cloud->points[k].y, cloud->points[k].z;

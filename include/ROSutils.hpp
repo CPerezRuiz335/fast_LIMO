@@ -21,10 +21,10 @@
 
 #include <nav_msgs/Odometry.h>
 
-#include "Imu.hpp"
-#include "State.hpp"
-#include "PCL.hpp"
-#include "Config.hpp"
+#include "Core/Imu.hpp"
+#include "Core/State.hpp"
+#include "Utils/PCL.hpp"
+#include "Utils/Config.hpp"
 
 
 Imu fromROS(const sensor_msgs::Imu::ConstPtr& in) {
@@ -53,37 +53,18 @@ PROFC_NODE("PointCloud2 to pcl")
   pcl::fromROSMsg(msg, raw);
 
   raw.is_dense = false;
-  std::vector<int> indices; // To store the indices of valid points
+  std::vector<int> indices;
   pcl::removeNaNFromPointCloud(raw, raw, indices);
 
-  std::function<bool(const PointT&, const PointT&)> point_time_cmp;
+  auto minmax = std::minmax_element(raw.points.begin(),
+                                    raw.points.end(), 
+                                    get_point_time_comp());
 
-  if (cfg.sensors.lidar.type == 0) {
-    
-    if (cfg.sensors.lidar.end_of_sweep)
-      point_time_cmp = [](const PointT& p1, const PointT& p2){ return p1.t > p2.t; };
-    else
-      point_time_cmp = [](const PointT& p1, const PointT& p2){ return p1.t < p2.t; };
-  
-  } else if (cfg.sensors.lidar.type == 1) {
-
-    if (cfg.sensors.lidar.end_of_sweep)
-      point_time_cmp = [](const PointT& p1, const PointT& p2){ return p1.time > p2.time; };
-    else
-      point_time_cmp = [](const PointT& p1, const PointT& p2){ return p1.time < p2.time; };
-
-  } else {
-    point_time_cmp = [](const PointT& p1, const PointT& p2){ return p1.timestamp > p2.timestamp; };
-  }
-
-  auto minmax = std::minmax_element(raw.points.begin(), raw.points.end(), point_time_cmp);
   if (minmax.first != raw.points.begin())
     std::iter_swap(minmax.first, raw.points.begin());
 
   if (minmax.second != raw.points.end() - 1)
     std::iter_swap(minmax.second, raw.points.end() - 1);
-
-
 }
 
 sensor_msgs::PointCloud2 toROS(const PointCloudT::Ptr& cloud, 
@@ -100,8 +81,7 @@ sensor_msgs::PointCloud2 toROS(const PointCloudT::Ptr& cloud,
 
 nav_msgs::Odometry toROS(State& state, 
                          const std::string& topic,
-                         const std::string& frame_id,
-                         const esekfom::esekf<state_ikfom, 12, input_ikfom>::cov& P) {
+                         const std::string& frame_id) {
 
   Config& cfg = Config::getInstance();
 
@@ -109,41 +89,38 @@ nav_msgs::Odometry toROS(State& state,
   nav_msgs::Odometry out;
 
   // Pose/Attitude
-  out.pose.pose.position    = tf2::toMsg(state.p);
-  out.pose.pose.orientation = tf2::toMsg(state.q);
+  out.pose.pose.position    = tf2::toMsg(state.p());
+  out.pose.pose.orientation = tf2::toMsg(state.quat());
 
   // Twist
-  out.twist.twist.linear.x = state.v(0);
-  out.twist.twist.linear.y = state.v(1);
-  out.twist.twist.linear.z = state.v(2);
+  out.twist.twist.linear.x = state.v()(0);
+  out.twist.twist.linear.y = state.v()(1);
+  out.twist.twist.linear.z = state.v()(2);
 
-  out.twist.twist.angular.x = state.w(0);
-  out.twist.twist.angular.y = state.w(1);
-  out.twist.twist.angular.z = state.w(2);
+  out.twist.twist.angular.x = state.w(0) - state.b_w()(0);
+  out.twist.twist.angular.y = state.w(1) - state.b_w()(1);
+  out.twist.twist.angular.z = state.w(2) - state.b_w()(2);
 
 
-  // Covariances
-  Eigen::Matrix<double, 6, 6> P_pose = Eigen::Matrix<double, 6, 6>::Zero();
-  P_pose.block<3, 3>(0, 0) = P.block<3, 3>(3, 3);
-  P_pose.block<3, 3>(0, 3) = P.block<3, 3>(3, 0);
-  P_pose.block<3, 3>(3, 0) = P.block<3, 3>(0, 3);
-  P_pose.block<3, 3>(3, 3) = P.block<3, 3>(0, 0);
+  // Covariances TODO as a method of State
+  // Eigen::Matrix<double, 6, 6> P_pose = Eigen::Matrix<double, 6, 6>::Zero();
+  // P_pose = state.P.block<6, 6>(0, 0);
 
-  std::vector<double> cov_pose(P_pose.size());
-  Eigen::Map<Eigen::MatrixXd>(cov_pose.data(), P_pose.rows(), P_pose.cols()) = P_pose;
+  // std::vector<double> cov_pose(P_pose.size());
+  // Eigen::Map<Eigen::MatrixXd>(cov_pose.data(), P_pose.rows(), P_pose.cols()) = P_pose;
 
-  Eigen::Matrix<double, 6, 6> P_twist = Eigen::Matrix<double, 6, 6>::Zero();
+  // Eigen::Matrix<double, 6, 6> P_twist = Eigen::Matrix<double, 6, 6>::Zero();
 
-  P_twist.block<3, 3>(0, 0) = P.block<3, 3>(6, 6);
-  P_twist.block<3, 3>(3, 3) = cfg.ikfom.covariance.gyro * Eigen::Matrix3d::Identity();
+  // P_twist.block<3, 3>(0, 0) = state.P.block<3, 3>(12, 12);
+  // P_twist.block<3, 3>(3, 3) = cfg.ikfom.covariance.gyro * Eigen::Matrix3d::Identity();
 
-  std::vector<double> cov_twist(P_twist.size());
-  Eigen::Map<Eigen::MatrixXd>(cov_twist.data(), P_twist.rows(), P_twist.cols()) = P_twist;
+  // std::vector<double> cov_twist(P_twist.size());
+  // Eigen::Map<Eigen::MatrixXd>(cov_twist.data(), P_twist.rows(), P_twist.cols()) = P_twist;
 
-  for (int i=0; i < cov_pose.size(); i++) {
-    out.pose.covariance[i]  = cov_pose[i];
-    out.twist.covariance[i] = cov_twist[i];
-  }
+  // for (int i=0; i < cov_pose.size(); i++) {
+  //   out.pose.covariance[i]  = cov_pose[i];
+  //   out.twist.covariance[i] = cov_twist[i];
+  // }
 
   out.header.frame_id = frame_id;
   out.header.stamp = ros::Time::now();

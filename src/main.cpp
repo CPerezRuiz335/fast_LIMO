@@ -11,16 +11,17 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 
-#include "Octree.hpp"
-#include "State.hpp"
-#include "ikfom.hpp"
-#include "Imu.hpp"
+#include "Core/Octree.hpp"
+#include "Core/State.hpp"
+#include "Core/Cloud.hpp"
+#include "Core/Imu.hpp"
+
+#include "Utils/Config.hpp"
 #include "ROSutils.hpp"
-#include "Config.hpp"
-#include "Cloud.hpp"
 
 
 ros::Publisher pub_state, pub_frame;
+
 
 class Manager {
   State state_;
@@ -38,7 +39,6 @@ class Manager {
 
   ros::NodeHandle nh_;
 
-  esekfom::esekf<state_ikfom, 12, input_ikfom> IKFoM_;
   thuni::Octree ioctree_;
 
   
@@ -46,10 +46,9 @@ public:
   Manager() : first_imu_stamp_(-1.0), state_buffer_(1000), ioctree_() {
     Config& cfg = Config::getInstance();
 
-    init_IKFoM(IKFoM_);
     imu_calibrated_ = not (cfg.sensors.calibration.gravity_align 
-                           | cfg.sensors.calibration.accel
-                           | cfg.sensors.calibration.gyro); 
+                           or cfg.sensors.calibration.accel
+                           or cfg.sensors.calibration.gyro); 
 
     ioctree_.set_bucket_size(cfg.ioctree.bucket_size);
     ioctree_.set_down_size(cfg.ioctree.downsample);
@@ -88,17 +87,16 @@ public:
           Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(
                                   grav_vec, 
                                   Eigen::Vector3d(0., 0., cfg.sensors.extrinsics.gravity));
-          state_.q = q;
-          state_.g = grav_vec;
+          state_.quat(q);
+          state_.g(-grav_vec);
         }
         
-        if (cfg.sensors.calibration.accel)
-          state_.b.accel = accel_avg - grav_vec;
-
         if (cfg.sensors.calibration.gyro)
-          state_.b.gyro = gyro_avg;
+          state_.b_w(gyro_avg);
 
-        setIKFoM_state(IKFoM_, state_);
+        if (cfg.sensors.calibration.accel)
+          state_.b_a(accel_avg - grav_vec);
+
         imu_calibrated_ = true;
       }
 
@@ -108,15 +106,12 @@ public:
 
       imu = imu2baselink(imu, dt);
 
-      // Correct bias
-      imu.lin_accel = cfg.sensors.intrinsics.sm * imu.lin_accel - state_.b.accel;
-      imu.ang_vel  -= state_.b.gyro;
-      
+      // Correct acceleration
+      imu.lin_accel = cfg.sensors.intrinsics.sm * imu.lin_accel;
       prev_imu_ = imu;
 
       mtx_state_.lock();
-        predict(IKFoM_, imu, dt);
-        state_ = State(IKFoM_.get_x(), imu);
+        state_.predict(imu, dt);
       mtx_state_.unlock();
 
       mtx_buffer_.lock();
@@ -127,8 +122,7 @@ public:
 
       nav_msgs::Odometry out = toROS(state_, 
                                      cfg.topics.output.state, 
-                                     cfg.topics.frame_id, 
-                                     IKFoM_.get_P());
+                                     cfg.topics.frame_id);
 
       pub_state.publish(out);
     }
@@ -213,10 +207,8 @@ PROFC_NODE("LiDAR Callback")
       return;
     }
 
-
-    update(IKFoM_, processed, ioctree_);
-    state_ = State(IKFoM_.get_x(), prev_imu_);
-    Eigen::Affine3f T = state_.affine3f() * state_.I2L;
+    state_.update(processed, ioctree_);
+    Eigen::Affine3f T = state_.affine3f() * state_.I2L_affine3f();
 
   mtx_state_.unlock();
 
@@ -227,8 +219,7 @@ PROFC_NODE("LiDAR Callback")
     // Publish
     pub_state.publish( toROS(state_, 
                              cfg.topics.output.state, 
-                             cfg.topics.frame_id, 
-                             IKFoM_.get_P()) );
+                             cfg.topics.frame_id) );
 
     pub_frame.publish(toROS(global, cfg.topics.output.frame, cfg.topics.frame_id));
 
@@ -246,7 +237,6 @@ PROFC_NODE("LiDAR Callback")
 
 int main(int argc, char** argv) {
 
-  std::cout << std::setprecision(10);
   pcl::console::setVerbosityLevel(pcl::console::L_ALWAYS);
   
   ros::init(argc, argv, "limoncello");

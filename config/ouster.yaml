@@ -24,9 +24,9 @@ sensors:
     hz: 100
 
   calibration:  # automatic IMU calibration (if all set to false, no calibration will be done)
-    gravity_align: true     # estimate gravity vector
-    accel: true             # estimate lin. accel. bias
-    gyro: true              # estimate ang. vel. bias
+    gravity_align: false     # estimate gravity vector
+    accel: false             # estimate lin. accel. bias
+    gyro: false              # estimate ang. vel. bias
     time: 1.5               # time to estimate (during this time, the 
                            # robot must be at stand still)
 
@@ -85,9 +85,9 @@ filters:
 
 IKFoM:  # Iterative Kalman Filter on Manifolds lib
   query_iters: 3 # number of iterations doing KNN from max iterations 
-  max_iters: 20  # max num+1 of iterations of the IESEKF (limits comp. load)
+  max_iters: 20  # max num of iterations of the IESEKF
   tolerance: 0.0001                      
-  estimate_extrinsics: true
+  estimate_extrinsics: false
   lidar_noise: 0.001
 
   covariance:
