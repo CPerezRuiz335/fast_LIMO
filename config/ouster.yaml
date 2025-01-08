@@ -75,7 +75,7 @@ filters:
     value: 5.5  # [m]
 
   fov: # crop field of view
-    active: true
+    active: false
     value: 180  # [deg]
   
   rate_sampling: # quick downsample
@@ -87,7 +87,7 @@ IKFoM:  # Iterative Kalman Filter on Manifolds lib
   query_iters: 3 # number of iterations doing KNN from max iterations 
   max_iters: 20  # max num+1 of iterations of the IESEKF (limits comp. load)
   tolerance: 0.0001                      
-  estimate_extrinsics: true
+  estimate_extrinsics: false
   lidar_noise: 0.001
 
   covariance:

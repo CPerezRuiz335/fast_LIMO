@@ -60,7 +60,7 @@ struct State {
     v = s.vel;
 
     // Gravity
-    g = s.grav.get_vect();
+    g = s.grav;
 
     // IMU bias
     b.gyro = s.bg;

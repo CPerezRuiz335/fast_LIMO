@@ -31,17 +31,17 @@ Eigen::Matrix<double, 24, 1> get_f(state_ikfom& s, const input_ikfom& in) {
 }
 
 
-Eigen::Matrix<double, 24, 23> df_dx(state_ikfom& s, const input_ikfom& in) {
-  Eigen::Matrix<double, 24, 23> cov = Eigen::Matrix<double, 24, 23>::Zero();
+Eigen::Matrix<double, 24, 24> df_dx(state_ikfom& s, const input_ikfom& in) {
+  Eigen::Matrix<double, 24, 24> cov = Eigen::Matrix<double, 24, 24>::Zero();
   cov.template block<3, 3>(0, 12) = Eigen::Matrix3d::Identity();
   
   vect3 acc = in.acc - s.ba;
   cov.template block<3, 3>(12, 3)  = -s.rot.toRotationMatrix()*MTK::hat(acc);
   cov.template block<3, 3>(12, 18) = -s.rot.toRotationMatrix();
-  Eigen::Matrix<state_ikfom::scalar, 2, 1> vec = Eigen::Matrix<state_ikfom::scalar, 2, 1>::Zero();
-  Eigen::Matrix<state_ikfom::scalar, 3, 2> grav_matrix;
-  s.S2_Mx(grav_matrix, vec, 21);
-  cov.template block<3, 2>(12, 21) =  grav_matrix;
+  // Eigen::Matrix<state_ikfom::scalar, 2, 1> vec = Eigen::Matrix<state_ikfom::scalar, 2, 1>::Zero();
+  // Eigen::Matrix<state_ikfom::scalar, 3, 2> grav_matrix;
+  // s.S2_Mx(grav_matrix, vec, 21);
+  cov.template block<3, 3>(12, 21) =  Eigen::Matrix3d::Identity();
   cov.template block<3, 3>(3, 15)  = -Eigen::Matrix3d::Identity();
 
   return cov;
@@ -78,7 +78,7 @@ void setIKFoM_state(esekfom::esekf<state_ikfom, 12, input_ikfom>& ikfom,
   state_ikfom init_state = ikfom.get_x();
   init_state.rot = state.q;
   init_state.pos = state.p;
-  init_state.grav = S2(-state.g);
+  init_state.grav = -state.g;
   init_state.bg = state.b.gyro;
   init_state.ba = state.b.accel;
 

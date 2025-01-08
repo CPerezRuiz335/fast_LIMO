@@ -16,7 +16,7 @@ MTK_BUILD_MANIFOLD(state_ikfom,
   ((vect3, vel))
   ((vect3, bg))
   ((vect3, ba))
-  ((S2, grav))
+  ((vect3, grav))
 );
 
 MTK_BUILD_MANIFOLD(input_ikfom,

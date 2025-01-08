@@ -52,10 +52,34 @@
 #include "../mtk/build_manifold.hpp"
 #include "util.hpp"
 
+
+#include <manif/manif.h>
+#include <manif/SO3.h>
+#include <manif/Bundle.h>
+#include <manif/Rn.h>
+
 //#define USE_sparse
 
 
 namespace esekfom {
+
+  using Matrix24d = Eigen::Matrix<double, 24, 24> ;
+  using Matrix24x12d = Eigen::Matrix<double, 24, 12> ;
+  using Matrix12d = Eigen::Matrix<double, 12, 12> ;
+
+  using BundleT = manif::Bundle<double,
+      manif::R3,  // position
+      manif::SO3, // rotation
+      manif::SO3, // imu2lidar rotation
+      manif::R3,  // imu2lidar translation
+      manif::R3,  // velocity
+      manif::R3,  // angular bias
+      manif::R3,  // acceleartion bias
+      manif::R3   // gravity
+  >;
+
+  using Tangent = typename BundleT::Tangent; 
+
 
 using namespace Eigen;
 
@@ -165,105 +189,31 @@ public:
 	void predict(double &dt, processnoisecovariance &Q, const input &i_in){
 		flatted_state f_ = f(x_, i_in);
 		cov_ f_x_ = f_x(x_, i_in);
-		cov f_x_final;
-
-		std::cout << "m: " << m << std::endl;
-		std::cout << "n: " << n << std::endl;
-
-
 		Matrix<scalar_type, m, process_noise_dof> f_w_ = f_w(x_, i_in);
-		Matrix<scalar_type, n, process_noise_dof> f_w_final;
-		state x_before = x_;
-		x_.oplus(f_, dt);
+		
 
-		F_x1 = cov::Identity();
-		for (std::vector<std::pair<std::pair<int, int>, int> >::iterator it = x_.vect_state.begin(); it != x_.vect_state.end(); it++) {
-			int idx = (*it).first.first;
-			int dim = (*it).first.second;
-			int dof = (*it).second;
-			for(int i = 0; i < n; i++){
-				for(int j=0; j<dof; j++)
-				{f_x_final(idx+j, i) = f_x_(dim+j, i);}
-			}
-			for(int i = 0; i < process_noise_dof; i++){
-				for(int j=0; j<dof; j++)
-				{f_w_final(idx+j, i) = f_w_(dim+j, i);}
-			}
-		}
-		Matrix<scalar_type, 3, 3> res_temp_SO3;
-		MTK::vect<3, scalar_type> seg_SO3;
-		for (std::vector<std::pair<int, int> >::iterator it = x_.SO3_state.begin(); it != x_.SO3_state.end(); it++) {
-			int idx = (*it).first;
-			int dim = (*it).second;
-			for(int i = 0; i < 3; i++){
-				seg_SO3(i) = -1 * f_(dim + i) * dt;
-			}
-			MTK::SO3<scalar_type> res;
-			res.w() = MTK::exp<scalar_type, 3>(res.vec(), seg_SO3, scalar_type(1/2));
-			F_x1.template block<3, 3>(idx, idx) = res.toRotationMatrix();
-			res_temp_SO3 = MTK::A_matrix(seg_SO3);
-			for(int i = 0; i < n; i++){
-				f_x_final. template block<3, 1>(idx, i) = res_temp_SO3 * (f_x_. template block<3, 1>(dim, i));	
-			}
-			for(int i = 0; i < process_noise_dof; i++){
-				f_w_final. template block<3, 1>(idx, i) = res_temp_SO3 * (f_w_. template block<3, 1>(dim, i));
-			}
-		}
-		
-		
-		Matrix<scalar_type, 2, 3> res_temp_S2;
-		Matrix<scalar_type, 2, 2> res_temp_S2_;
-		MTK::vect<3, scalar_type> seg_S2;
-		for (std::vector<std::pair<int, int> >::iterator it = x_.S2_state.begin(); it != x_.S2_state.end(); it++) {
-			int idx = (*it).first;
-			int dim = (*it).second;
-			for(int i = 0; i < 3; i++){
-				seg_S2(i) = f_(dim + i) * dt;
-			}
-			MTK::vect<2, scalar_type> vec = MTK::vect<2, scalar_type>::Zero();
-			MTK::SO3<scalar_type> res;
-			res.w() = MTK::exp<scalar_type, 3>(res.vec(), seg_S2, scalar_type(1/2));
-			Eigen::Matrix<scalar_type, 2, 3> Nx;
-			Eigen::Matrix<scalar_type, 3, 2> Mx;
-			x_.S2_Nx_yy(Nx, idx);
-			x_before.S2_Mx(Mx, vec, idx);
-		
-			F_x1.template block<2, 2>(idx, idx) = Nx * res.toRotationMatrix() * Mx;
+// Manif
+		Matrix24d Gx, Gf; // Adjoint_X(u)^{-1}, J_r(u)  Sola-18, [https://arxiv.org/abs/1812.01537]
+    X = X.plus(Tangent(f_ * dt), Gx, Gf);
+// Manif
 
-			Eigen::Matrix<scalar_type, 3, 3> x_before_hat;
-			x_before.S2_hat(x_before_hat, idx);
-			res_temp_S2 = -Nx * res.toRotationMatrix() * x_before_hat*MTK::A_matrix(seg_S2).transpose();
-			
-			for(int i = 0; i < n; i++){
-				f_x_final. template block<2, 1>(idx, i) = res_temp_S2 * (f_x_. template block<3, 1>(dim, i));
-				
-			}
-			for(int i = 0; i < process_noise_dof; i++){
-				f_w_final. template block<2, 1>(idx, i) = res_temp_S2 * (f_w_. template block<3, 1>(dim, i));
-			}
-			// int idx = (*it).first;
-			// int dim = (*it).first.second;
-			// int dof = (*it).second;
-			// for(int i = 0; i < n; i++){
-			// 	for(int j=0; j<dof; j++)
-			// 	{f_x_final(idx+j, i) = f_x_(dim+j, i);}
-			// }
-			// for(int i = 0; i < process_noise_dof; i++){
-			// 	for(int j=0; j<dof; j++)
-			// 	{f_w_final(idx+j, i) = f_w_(dim+j, i);}
-			// }
-		}
-	
-	
-		F_x1 += f_x_final * dt;
-		P_ = (F_x1) * P_ * (F_x1).transpose() + (dt * f_w_final) * Q * (dt * f_w_final).transpose();
+		Matrix24d    Fx = Gx + Gf * f_x_ * dt; // He-2021, [https://arxiv.org/abs/2102.03804] Eq. (26)
+    Matrix24x12d Fw = Gf * f_w_ * dt;      // He-2021, [https://arxiv.org/abs/2102.03804] Eq. (27)
+
+		P_ = Fx * P_ * Fx.transpose() + Fw * Q * Fw.transpose(); 
+
+		x_.pos = X.element<0>().coeffs();
+		x_.rot = X.element<1>().quat();
+		x_.offset_R_L_I = X.element<2>().quat();
+		x_.offset_T_L_I = X.element<3>().coeffs();
+		x_.vel = X.element<4>().coeffs();
+		x_.bg = X.element<5>().coeffs();
+		x_.ba = X.element<6>().coeffs();
+		x_.grav = X.element<7>().coeffs();
 
 	}
 	
-	
 
-
-	
 	// Modified version used in Fast-LIO2
 	//iterated error state EKF update modified for one specific system.
 	template<typename measurementModel_dyn_runtime_share>
@@ -273,104 +223,48 @@ public:
 		dyn_share_datastruct<scalar_type> dyn_share;
 		dyn_share.valid = true;
 		dyn_share.converge = true;
-		int t = 0;
 		state x_propagated = x_;
-		cov P_propagated = P_;
-		int dof_Measurement;
+		int t = 0;
+
+		BundleT X_ = X;
+		cov P__ = P_;
 
 		Matrix<scalar_type, n, 1> K_h;
 		Matrix<scalar_type, n, n> K_x;
 
-		vectorized_state dx_new = vectorized_state::Zero();
+		Tangent dx_new = Tangent::Zero();
 		for(int i=-1; i<maximum_iter; i++)
 		{
 			dyn_share.valid = true;
 			h(x_, dyn_share);
 
 
-			if(! dyn_share.valid)
-			{
-				continue;
-			}
-
 			Eigen::Matrix<scalar_type, Eigen::Dynamic, 12> h_x_ = dyn_share.h_x;
-			dof_Measurement = h_x_.rows();
-			vectorized_state dx;
-			x_.boxminus(dx, x_propagated);
-			dx_new = dx;
 
-			P_ = P_propagated;
+			Matrix24d J, J_;
+      dx_new = X_.minus(X, J, J_); // Xu-2021, [https://arxiv.org/abs/2107.06829] Eq. (11)
+			vectorized_state dx__;
+			x_.boxminus(dx__, x_propagated);
+			// dx_new.coeffs() = dx__;
 
-			Matrix<scalar_type, 3, 3> res_temp_SO3;
-			MTK::vect<3, scalar_type> seg_SO3;
-			for (std::vector<std::pair<int, int> >::iterator it = x_.SO3_state.begin(); it != x_.SO3_state.end(); it++) {
-				int idx = (*it).first;
-				int dim = (*it).second;
-				for(int i = 0; i < 3; i++){
-					seg_SO3(i) = dx(idx+i);
-				}
-
-				res_temp_SO3 = MTK::A_matrix(seg_SO3).transpose();
-				dx_new.template block<3, 1>(idx, 0) = res_temp_SO3 * dx_new.template block<3, 1>(idx, 0);
-				for(int i = 0; i < n; i++){
-					P_. template block<3, 1>(idx, i) = res_temp_SO3 * (P_. template block<3, 1>(idx, i));	
-				}
-				for(int i = 0; i < n; i++){
-					P_. template block<1, 3>(i, idx) =(P_. template block<1, 3>(i, idx)) *  res_temp_SO3.transpose();	
-				}
-			}
-
-			Matrix<scalar_type, 2, 2> res_temp_S2;
-			MTK::vect<2, scalar_type> seg_S2;
-			for (std::vector<std::pair<int, int> >::iterator it = x_.S2_state.begin(); it != x_.S2_state.end(); it++) {
-				int idx = (*it).first;
-				int dim = (*it).second;
-				for(int i = 0; i < 2; i++){
-					seg_S2(i) = dx(idx + i);
-				}
-
-				Eigen::Matrix<scalar_type, 2, 3> Nx;
-				Eigen::Matrix<scalar_type, 3, 2> Mx;
-				x_.S2_Nx_yy(Nx, idx);
-				x_propagated.S2_Mx(Mx, seg_S2, idx);
-				res_temp_S2 = Nx * Mx;
-				dx_new.template block<2, 1>(idx, 0) = res_temp_S2 * dx_new.template block<2, 1>(idx, 0);
-				for(int i = 0; i < n; i++){
-					P_. template block<2, 1>(idx, i) = res_temp_S2 * (P_. template block<2, 1>(idx, i));	
-				}
-				for(int i = 0; i < n; i++){
-					P_. template block<1, 2>(i, idx) = (P_. template block<1, 2>(i, idx)) * res_temp_S2.transpose();
-				}
-			}
+      P__ = J.inverse() * P_ * J.inverse().transpose();
 
 			Eigen::Matrix<scalar_type, 12, 12> HTH;
 
-			if(n > dof_Measurement)
-			{
-				Eigen::Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic> h_x_cur = Eigen::Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic>::Zero(dof_Measurement, n);
-				h_x_cur.topLeftCorner(dof_Measurement, 12) = h_x_;
 
-				Matrix<scalar_type, Eigen::Dynamic, Eigen::Dynamic> K_ = P_ * h_x_cur.transpose() 
-				  * (h_x_cur * P_ * h_x_cur.transpose()/R + Eigen::Matrix<double, Dynamic, Dynamic>::Identity(dof_Measurement, dof_Measurement)).inverse()/R; // MATRIX S
-				K_h = K_ * dyn_share.h;
-				K_x = K_ * h_x_cur;
-			}
-			else
-			{
-				cov P_temp = (P_/R).inverse();
-				HTH = h_x_.transpose() * h_x_;
-				P_temp. template block<12, 12>(0, 0) += HTH;
+			cov P_temp = (P__/R).inverse();
+			HTH = h_x_.transpose() * h_x_;
+			P_temp. template block<12, 12>(0, 0) += HTH;
 
-				cov P_inv = P_temp.inverse();
-				K_h = P_inv. template block<n, 12>(0, 0) * h_x_.transpose() * dyn_share.h;
-				K_x.setZero();
-				K_x. template block<n, 12>(0, 0) = P_inv. template block<n, 12>(0, 0) * HTH;
-			}
+			cov P_inv = P_temp.inverse();
+			K_h = P_inv. template block<n, 12>(0, 0) * h_x_.transpose() * dyn_share.h;
+			K_x.setZero();
+			K_x. template block<n, 12>(0, 0) = P_inv. template block<n, 12>(0, 0) * HTH;
+			Tangent dx_ = K_h + (K_x - Matrix<scalar_type, n, n>::Identity()) * J.inverse() * dx_new; 
 
-			Matrix<scalar_type, n, 1> dx_ = K_h + (K_x - Matrix<scalar_type, n, n>::Identity()) * dx_new; 
+			X_ = X_.plus(dx_);
+			x_.boxplus(dx_.coeffs());
 
-			x_.boxplus(dx_);
-			
 			dyn_share.converge = true;
 			for(int i = 0; i < n ; i++)
 			{
@@ -389,58 +283,16 @@ public:
 
 			if(t > 1 || i == maximum_iter - 1)
 			{
-				L_ = P_;
-				Matrix<scalar_type, 3, 3> res_temp_SO3;
-				MTK::vect<3, scalar_type> seg_SO3;
-				for(typename std::vector<std::pair<int, int> >::iterator it = x_.SO3_state.begin(); it != x_.SO3_state.end(); it++) {
-					int idx = (*it).first;
-					for(int i = 0; i < 3; i++){
-						seg_SO3(i) = dx_(i + idx);
-					}
-					res_temp_SO3 = MTK::A_matrix(seg_SO3).transpose();
-					for(int i = 0; i < n; i++){
-						L_. template block<3, 1>(idx, i) = res_temp_SO3 * (P_. template block<3, 1>(idx, i)); 
-					}
-
-					for(int i = 0; i < 12; i++){
-						K_x. template block<3, 1>(idx, i) = res_temp_SO3 * (K_x. template block<3, 1>(idx, i));
-					}
-
-					for(int i = 0; i < n; i++){
-						L_. template block<1, 3>(i, idx) = (L_. template block<1, 3>(i, idx)) * res_temp_SO3.transpose();
-						P_. template block<1, 3>(i, idx) = (P_. template block<1, 3>(i, idx)) * res_temp_SO3.transpose();
-					}
-				}
-
-				Matrix<scalar_type, 2, 2> res_temp_S2;
-				MTK::vect<2, scalar_type> seg_S2;
-				for(typename std::vector<std::pair<int, int> >::iterator it = x_.S2_state.begin(); it != x_.S2_state.end(); it++) {
-					int idx = (*it).first;
-
-					for(int i = 0; i < 2; i++){
-						seg_S2(i) = dx_(i + idx);
-					}
-
-					Eigen::Matrix<scalar_type, 2, 3> Nx;
-					Eigen::Matrix<scalar_type, 3, 2> Mx;
-					x_.S2_Nx_yy(Nx, idx);
-					x_propagated.S2_Mx(Mx, seg_S2, idx);
-					res_temp_S2 = Nx * Mx; 
-					for(int i = 0; i < n; i++){
-						L_. template block<2, 1>(idx, i) = res_temp_S2 * (P_. template block<2, 1>(idx, i)); 
-					}
-
-					for(int i = 0; i < 12; i++){
-						K_x. template block<2, 1>(idx, i) = res_temp_S2 * (K_x. template block<2, 1>(idx, i));
-					}
-
-					for(int i = 0; i < n; i++){
-						L_. template block<1, 2>(i, idx) = (L_. template block<1, 2>(i, idx)) * res_temp_S2.transpose();
-						P_. template block<1, 2>(i, idx) = (P_. template block<1, 2>(i, idx)) * res_temp_S2.transpose();
-					}
-				}
-
-				P_ = L_ - K_x.template block<n, 12>(0, 0) * P_.template block<12, n>(0, 0);
+				X = X_;
+				P_ = (Matrix24d::Identity() - K_x) * P__;
+				x_.pos = X.element<0>().coeffs();
+				x_.rot = X.element<1>().quat();
+				x_.offset_R_L_I = X.element<2>().quat();
+				x_.offset_T_L_I = X.element<3>().coeffs();
+				x_.vel = X.element<4>().coeffs();
+				x_.bg = X.element<5>().coeffs();
+				x_.ba = X.element<6>().coeffs();
+				x_.grav = X.element<7>().coeffs();
 				return;
 			}
 		}
@@ -456,6 +308,16 @@ public:
 			x_.build_SO3_state();
 			x_.build_vect_state();
 		}
+
+		X = BundleT(manif::R3d(x_.pos),
+                manif::SO3d(x_.rot.normalized()),
+                manif::SO3d(x_.offset_R_L_I.normalized()),
+                manif::R3d(x_.offset_T_L_I),
+                manif::R3d(x_.vel),
+                manif::R3d(x_.bg),
+                manif::R3d(x_.ba),
+                manif::R3d(x_.grav)); // NOTE
+
 	}
 
 	void change_P(cov &input_cov)
@@ -518,6 +380,9 @@ private:
         }
         return temp_vec;
     }
+
+	BundleT X;
+
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
