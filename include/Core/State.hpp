@@ -102,9 +102,6 @@ PROFC_NODE("predict")
 
     P = Fx * P * Fx.transpose() + Fw * Q * Fw.transpose(); 
 
-    // print("Covariance matrix: \n");
-    // print(P);
-
     // SAVE EXTRA INFO
     a = imu.lin_accel;
     w = imu.ang_vel;
@@ -275,10 +272,10 @@ PROFC_NODE("update")
       h_model(); // Update H,z and set K to zeros
 
       // update P
-      Matrix24d J;
-      X_.minus(X, J); // Xu-2021, [https://arxiv.org/abs/2107.06829] Eq. (11)
+      Matrix24d J, J_;
+      Tangent dx = X_.minus(X, J, J_); // Xu-2021, [https://arxiv.org/abs/2107.06829] Eq. (11)
 
-      // P_ = J.inverse() * P * J.inverse().transpose();
+      P_ = J.inverse() * P * J.inverse().transpose();
 
       Matrix24d HTH = Matrix24d::Zero();
       HTH.block<12, 12>(0, 0) = H.transpose() * H;
@@ -292,10 +289,10 @@ PROFC_NODE("update")
       KH.block<24, 12>(0, 0) = K * H;
 
       // Inject error into current state
-      Tangent step = Tangent(K*z + (KH - Matrix24d::Identity()) * (X_ - X).coeffs());
-      X_ = X_.plus(step);
+      dx = K*z + (KH - Matrix24d::Identity()) * J.inverse() * dx;
+      X_ = X_.plus(dx);
 
-      if ((step.coeffs().array().abs() <= cfg.ikfom.tolerance).all())
+      if ((dx.coeffs().array().abs() <= cfg.ikfom.tolerance).all())
         break;
 
     } while(i++ < cfg.ikfom.max_iters);
