@@ -24,9 +24,11 @@
 
 struct State {
 
-  using Matrix24d = Eigen::Matrix<double, 24, 24> ;
-  using Matrix24x12d = Eigen::Matrix<double, 24, 12> ;
-  using Matrix12d = Eigen::Matrix<double, 12, 12> ;
+  using Matrix24d = Eigen::Matrix<double, 24, 24>;
+  using Matrix24x12d = Eigen::Matrix<double, 24, 12>;
+  using Matrix12d = Eigen::Matrix<double, 12, 12>;
+  using Vector24d = Eigen::Matrix<double, 24, 1>;
+
 
   using BundleT = manif::Bundle<double,
       manif::R3,  // position
@@ -162,16 +164,13 @@ PROFC_NODE("update")
     if (map.size() == 0)
       return;
 
-    Eigen::Matrix<double, Eigen::Dynamic, 12> H;
-    Eigen::Matrix<double, Eigen::Dynamic,  1> z;
-    Eigen::Matrix<double, 24, Eigen::Dynamic> K;
-
     Matches first_matches;
     int query_iters = cfg.ikfom.query_iters;
 
 // OBSERVATION MODEL
 
-    auto h_model = [&]() {
+    auto h_model = [&](Eigen::Matrix<double, Eigen::Dynamic, 12>& H,
+                       Eigen::Matrix<double, Eigen::Dynamic,  1>& z) {
 
       int N = cloud->size();
 
@@ -224,7 +223,6 @@ PROFC_NODE("update")
 
       H = Eigen::MatrixXd::Zero(first_matches.size(), 12);
       z = Eigen::MatrixXd::Zero(first_matches.size(), 1);
-      K = Eigen::MatrixXd::Zero(24, first_matches.size());
 
       std::vector<int> indices(first_matches.size());
       std::iota(indices.begin(), indices.end(), 0);
@@ -262,6 +260,9 @@ PROFC_NODE("update")
 
     BundleT   X_ = X;
     Matrix24d P_ = P;
+
+    Eigen::Matrix<double, Eigen::Dynamic, 12> H;
+    Eigen::Matrix<double, Eigen::Dynamic,  1> z;
     Matrix24d KH;
 
     double R = cfg.ikfom.lidar_noise;
@@ -269,7 +270,7 @@ PROFC_NODE("update")
     int i(0);
 
     do {
-      h_model(); // Update H,z and set K to zeros
+      h_model(H, z); // Update H,z and set K to zeros
 
       // update P
       Matrix24d J, J_;
@@ -277,19 +278,18 @@ PROFC_NODE("update")
 
       P_ = J.inverse() * P * J.inverse().transpose();
 
-      Matrix24d HTH = Matrix24d::Zero();
-      HTH.block<12, 12>(0, 0) = H.transpose() * H;
+			Matrix12d HTH = H.transpose() * H;
+			Matrix24d P_inv = (P_/R).inverse();
+			P_inv.block<12, 12>(0, 0) += HTH;
+			P_inv = P_inv.inverse();
 
-      // Get K
-      Matrix24d K_front = (HTH / R + P_.inverse()).inverse();
-      K = K_front.block<24, 12>(0, 0) * H.transpose() / R; 
+			Vector24d Kz = Vector24d::Zero(); 
+      Kz = P_inv.block<24, 12>(0, 0) * H.transpose() * z;
 
-      // Save KH
       KH.setZero();
-      KH.block<24, 12>(0, 0) = K * H;
+			KH.block<24, 12>(0, 0) = P_inv.block<24, 12>(0, 0) * HTH;
 
-      // Inject error into current state
-      dx = K*z + (KH - Matrix24d::Identity()) * J.inverse() * dx;
+			dx = Kz + (KH - Matrix24d::Identity()) * J.inverse() * dx; 
       X_ = X_.plus(dx);
 
       if ((dx.coeffs().array().abs() <= cfg.ikfom.tolerance).all())
