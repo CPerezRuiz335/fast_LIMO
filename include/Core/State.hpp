@@ -82,8 +82,6 @@ struct State {
 	  Q.block<3, 3>(9, 9) = cfg.ikfom.covariance.bias_accel * Eigen::Matrix3d::Identity(); // n_{b_a}
   } 
 
-
-
   void predict(const Imu& imu, const double& dt) {
 PROFC_NODE("predict")
 
@@ -169,7 +167,8 @@ PROFC_NODE("update")
 
 // OBSERVATION MODEL
 
-    auto h_model = [&](Eigen::Matrix<double, Eigen::Dynamic, 12>& H,
+    auto h_model = [&](const State& s,
+                       Eigen::Matrix<double, Eigen::Dynamic, 12>& H,
                        Eigen::Matrix<double, Eigen::Dynamic,  1>& z) {
 
       int N = cloud->size();
@@ -188,7 +187,7 @@ PROFC_NODE("update")
           [&](int i) {
             PointT pt = cloud->points[i];
             Eigen::Vector3f p(pt.x, pt.y, pt.z);
-            Eigen::Vector3f g = affine3f() * I2L_affine3f() * p; // global coords 
+            Eigen::Vector3f g = s.affine3f() * s.I2L_affine3f() * p; // global coords 
 
             std::vector<pcl::PointXYZ> neighbors;
             std::vector<float> pointSearchSqDis;
@@ -217,7 +216,7 @@ PROFC_NODE("update")
 
       } else {
         for (auto& match : first_matches) {
-          match.global = affine3f() * I2L_affine3f() * match.local; 
+          match.global = s.affine3f() * s.I2L_affine3f() * match.local; 
         }
       }
 
@@ -234,15 +233,15 @@ PROFC_NODE("update")
         indices.end(),
         [&](int i) {
           Match match = first_matches[i];
-          Eigen::Vector3f p_imu   = affine3f().inverse() * match.global;
-          Eigen::Vector3f p_lidar = I2L_affine3f().inverse() * p_imu;
+          Eigen::Vector3f p_imu   = s.affine3f().inverse() * match.global;
+          Eigen::Vector3f p_lidar = s.I2L_affine3f().inverse() * p_imu;
 
           // Set correct dimensions
           Eigen::Vector3f n = match.n.head(3);
 
           // Calculate measurement Jacobian H (:= dh/dx)
-          Eigen::Vector3f C = R().transpose().cast<float>() * n;
-          Eigen::Vector3f B = p_lidar.cross(I2L_R().transpose().cast<float>() * C);
+          Eigen::Vector3f C = s.R().transpose().cast<float>() * n;
+          Eigen::Vector3f B = p_lidar.cross(s.I2L_R().transpose().cast<float>() * C);
           Eigen::Vector3f A = p_imu.cross(C);
           
           H.block<1, 6>(i, 0) << n(0), n(1), n(2), A(0), A(1), A(2);
@@ -258,8 +257,8 @@ PROFC_NODE("update")
 
 // IESEKF UPDATE
 
-    BundleT   X_ = X;
-    Matrix24d P_ = P;
+    BundleT   X_predicted = X;
+    Matrix24d P_predicted = P;
 
     Eigen::Matrix<double, Eigen::Dynamic, 12> H;
     Eigen::Matrix<double, Eigen::Dynamic,  1> z;
@@ -270,35 +269,35 @@ PROFC_NODE("update")
     int i(0);
 
     do {
-      h_model(H, z); // Update H,z and set K to zeros
+      h_model(*this, H, z); // Update H,z and set K to zeros
 
       // update P
-      Matrix24d J, J_;
-      Tangent dx = X_.minus(X, J, J_); // Xu-2021, [https://arxiv.org/abs/2107.06829] Eq. (11)
+      Matrix24d J;
+      Tangent dx = X.minus(X_predicted, J); // Xu-2021, [https://arxiv.org/abs/2107.06829] Eq. (11)
 
-      P_ = J.inverse() * P * J.inverse().transpose();
+      P = J.inverse() * P_predicted * J.inverse().transpose();
 
-			Matrix12d HTH = H.transpose() * H;
-			Matrix24d P_inv = (P_/R).inverse();
+			Matrix12d HTH = H.transpose() * H / R;
+			Matrix24d P_inv = P.inverse();
 			P_inv.block<12, 12>(0, 0) += HTH;
 			P_inv = P_inv.inverse();
 
 			Vector24d Kz = Vector24d::Zero(); 
-      Kz = P_inv.block<24, 12>(0, 0) * H.transpose() * z;
+      Kz = P_inv.block<24, 12>(0, 0) * H.transpose() * z / R;
 
       KH.setZero();
 			KH.block<24, 12>(0, 0) = P_inv.block<24, 12>(0, 0) * HTH;
 
 			dx = Kz + (KH - Matrix24d::Identity()) * J.inverse() * dx; 
-      X_ = X_.plus(dx);
+      X = X.plus(dx);
 
       if ((dx.coeffs().array().abs() <= cfg.ikfom.tolerance).all())
         break;
 
     } while(i++ < cfg.ikfom.max_iters);
 
-    X = X_;
-    P = (Matrix24d::Identity() - KH) * P_;
+    X = X;
+    P = (Matrix24d::Identity() - KH) * P;
   }
 
 

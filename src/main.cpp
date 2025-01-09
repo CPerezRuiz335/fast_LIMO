@@ -165,6 +165,7 @@ PROFC_NODE("LiDAR Callback")
     double end_stamp = point_time(raw->points.back(), sweep_time) + offset;
 
     if (state_buffer_.front().stamp < end_stamp) {
+      std::cout << std::setprecision(20);
       std::cout <<
         "PROPAGATE WAITING... \n" <<
         "     - buffer time: " << state_buffer_.front().stamp << "\n"
