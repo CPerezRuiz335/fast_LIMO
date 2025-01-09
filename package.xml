@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>fast_limo</name>
+  <name>limoncello</name>
   <version>0.0.0</version>
-  <description>The fast_limo package</description>
+  <description>The LIMOncello package</description>
 
-  <maintainer email="oriol.martinez.fite@gmail.com">fetty</maintainer>
-  <author email="oriol.martinez.fite@gmail.com">fetty</author>
+  <author email="carlosp335@gmail.com">CPerezRuiz335</author>
+  <maintainer email="carlosp335@gmail.com">CPerezRuiz335</maintainer>
 
-  <license>GPLv3</license>
+  <license>MIT</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>roscpp</build_depend>

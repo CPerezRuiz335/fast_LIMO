@@ -42,21 +42,19 @@ PointCloudT::Ptr deskew(const PointCloudT::Ptr& cloud,
 PROFC_NODE("deskew")
 
   auto binary_search = [&](const double& t) {
-    int low = 0;
-    int high = buffer.size() - 1;
+    int l(0), r(buffer.size()-1);
     
-    while (high >= low) {
-      int mid = (low + high) / 2;
-      if (buffer[mid].stamp > t)
-        high = mid - 1;
+    while (l < r) {
+      int m = (l + r) / 2;
+      if (buffer[m].stamp == t)
+        return m;
+      else if (t < buffer[m].stamp)
+        r = m - 1;
       else
-        low = mid + 1;
+        l = m + 1;
     }
 
-    if (high < 0)
-      return 0;
-
-    return high;
+    return l-1 > 0 ? l-1 : l;
   };
 
 
@@ -148,7 +146,6 @@ PROFC_NODE("filter")
 PointCloudT::Ptr voxel_grid(const PointCloudT::Ptr& cloud) {
 
 PROFC_NODE("downsample")
-
 
   Config& cfg = Config::getInstance();
 

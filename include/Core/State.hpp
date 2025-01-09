@@ -29,7 +29,6 @@ struct State {
   using Matrix12d = Eigen::Matrix<double, 12, 12>;
   using Vector24d = Eigen::Matrix<double, 24, 1>;
 
-
   using BundleT = manif::Bundle<double,
       manif::R3,  // position
       manif::SO3, // rotation

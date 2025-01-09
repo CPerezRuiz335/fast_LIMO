@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(fast_limo VERSION 0.0.1)
+project(limoncello VERSION 0.0.1)
 
-if(NOT CMAKE_BUILD_TYPE)
+if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Release or Debug)" FORCE)
 endif()
 

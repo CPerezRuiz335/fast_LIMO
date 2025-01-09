@@ -20,7 +20,8 @@
 #include "ROSutils.hpp"
 
 
-ros::Publisher pub_state, pub_frame;
+ros::Publisher pub_state, pub_frame, pub_raw, 
+               pub_deskewed, pub_downsampled, pub_to_match;
 
 
 class Manager {
@@ -120,11 +121,7 @@ public:
 
       cv_prop_stamp_.notify_one();
 
-      nav_msgs::Odometry out = toROS(state_, 
-                                     cfg.topics.output.state, 
-                                     cfg.topics.frame_id);
-
-      pub_state.publish(out);
+      pub_state.publish(toROS(state_));
     }
 
   }
@@ -178,11 +175,11 @@ PROFC_NODE("LiDAR Callback")
     } 
 
 
-    mtx_buffer_.lock();
+  mtx_buffer_.lock();
     States interpolated = filter_states(state_buffer_,
                                         start_stamp,
                                         end_stamp);
-    mtx_buffer_.unlock();
+  mtx_buffer_.unlock();
 
     if (start_stamp < interpolated.front().stamp or interpolated.size() == 0) {
       // every points needs to have a state associated not in the past
@@ -202,7 +199,6 @@ PROFC_NODE("LiDAR Callback")
     
     PointCloudT::Ptr processed = process(downsampled);
 
-
     if (processed->points.empty()) {
       ROS_ERROR("[LIMONCELLO] Processed & downsampled cloud is empty!");
       return;
@@ -218,19 +214,21 @@ PROFC_NODE("LiDAR Callback")
     pcl::transformPointCloud(*processed, *processed, T);
 
     // Publish
-    pub_state.publish( toROS(state_, 
-                             cfg.topics.output.state, 
-                             cfg.topics.frame_id) );
+    pub_state.publish(toROS(state_));
+    pub_frame.publish(toROS(global));
 
-    pub_frame.publish(toROS(global, cfg.topics.output.frame, cfg.topics.frame_id));
+    if (cfg.debug) {
+      pub_raw.publish(toROS(raw));
+      pub_deskewed.publish(toROS(deskewed));
+      pub_downsampled.publish(toROS(downsampled));
+      pub_to_match.publish(toROS(processed));
+    }
 
-    // Update
+    // Update map
     ioctree_.update(processed->points);
 
-
-    if (cfg.verbose) {
+    if (cfg.verbose)
       PROFC_PRINT()
-    }
 
   }
 };
@@ -244,9 +242,9 @@ int main(int argc, char** argv) {
   ros::NodeHandle nh("~");
   
 
-  // Setup config parameters
+  // Setup config parameters.
   Config& cfg = Config::getInstance();
-  cfg.fill(nh);
+  fill_config(cfg, nh); 
 
   // Initialize manager (reads from config)
   Manager manager = Manager();
@@ -254,6 +252,13 @@ int main(int argc, char** argv) {
   // Publishers
   pub_state = nh.advertise<nav_msgs::Odometry>(cfg.topics.output.state, 10);
   pub_frame = nh.advertise<sensor_msgs::PointCloud2>(cfg.topics.output.frame, 10);
+
+  // Debug only
+  pub_raw         = nh.advertise<sensor_msgs::PointCloud2>("debug/raw",         10);
+  pub_deskewed    = nh.advertise<sensor_msgs::PointCloud2>("debug/deskewed",    10);
+  pub_downsampled = nh.advertise<sensor_msgs::PointCloud2>("debug/downsampled", 10);
+  pub_to_match    = nh.advertise<sensor_msgs::PointCloud2>("debug/to_match",    10);
+
 
   // Subscribers
   ros::Subscriber lidar_sub = nh.subscribe(cfg.topics.input.lidar,
@@ -274,6 +279,5 @@ int main(int argc, char** argv) {
   ros::waitForShutdown();
 
   return 0;
-
 }
 

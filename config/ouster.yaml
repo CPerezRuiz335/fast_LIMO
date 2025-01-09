@@ -6,8 +6,8 @@ topics:
     imu:   /ouster/imu
     # imu: /EL/Sensors/vectornav/IMU
   output:
-    state: /limovelo/state  
-    frame: /limovelo/full_pcl
+    state: state  
+    frame: full_pcl
   frame_id: global
 
 
