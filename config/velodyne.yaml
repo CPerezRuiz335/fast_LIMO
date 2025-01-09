@@ -10,8 +10,8 @@ topics:
   frame_id: global
 
 
-verbose: false   # print debug/performance board (from DLIO)
-debug: true     # fill useful intermediate pcl (deskewed, processed ...) 
+verbose: true   # print debug/performance board
+debug: false     # fill useful intermediate pcl (deskewed, processed ...) 
                 # for visualizing purposes
 
 sensors:
@@ -66,7 +66,7 @@ sensors:
 filters:
   voxel_grid:
     active: true
-    leaf_size: [ .5, .5, .5 ]
+    leaf_size: [ 1., 1., 1. ]
 
   min_distance: # sphere crop
     active: true
@@ -82,10 +82,10 @@ filters:
 
 
 IKFoM:  # Iterative Kalman Filter on Manifolds lib
-  query_iters: 3 # number of iterations doing KNN from max iterations 
-  max_iters: 3  # max num of iterations of the IESEKF
-  tolerance: 0.001                      
-  estimate_extrinsics: false
+  query_iters: 1 # number of iterations doing KNN from max iterations 
+  max_iters: 20  # max num of iterations of the IESEKF
+  tolerance: 0.0001                      
+  estimate_extrinsics: true
   lidar_noise: 0.001
 
   covariance:

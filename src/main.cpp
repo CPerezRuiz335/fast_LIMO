@@ -229,7 +229,6 @@ PROFC_NODE("LiDAR Callback")
 
     if (cfg.verbose)
       PROFC_PRINT()
-
   }
 };
 

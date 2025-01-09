@@ -14,7 +14,7 @@
 
 States filter_states(const States& states, const double& start, const double& end) {
 
-  States out(100); // Always initialize circular buffer !!
+  States out(250); // Always initialize circular buffer !!
 
   for (const auto& state : states) {
     if (state.stamp >= end)

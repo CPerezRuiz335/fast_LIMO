@@ -11,8 +11,8 @@ topics:
   frame_id: global
 
 
-verbose: false   # print debug/performance board (from DLIO)
-debug: true     # fill useful intermediate pcl (deskewed, processed ...) 
+verbose: true   # print performance board
+debug: false     # fill useful intermediate pcl (deskewed, processed ...) 
                 # for visualizing purposes
 
 sensors:
